@@ -36,4 +36,6 @@ Edit, commit, run tests, start containers, or touch another worktree. Read-only 
 - **The contract table:** each rule, met / partly / missing, with `file:line`.
 - A heading "Builder's answers", empty.
 
+- **Structure findings also get `[smell]`:** duplication, a rule in the wrong layer, a file or function growing past its limit, a third near-copy, a fix repeating an earlier one, a swallowed error, a missing log at a boundary, an unvalidated input. They block only as majors; the CTO collects them.
+
 Answer in at most 8 lines: the verdict, the count per severity, the top three findings in one line each.

@@ -22,4 +22,4 @@ Minor fixes during a merge (a conflict, a size rule, a stale test) need no revie
 
 ## Answer
 
-After each push, at most 6 lines: what was merged, the pushed commit, the check numbers, any red let through and why.
+After each push, at most 6 lines: what was merged, the pushed commit, the check numbers, any red let through and why, and one size line: the KB of `AGENTS.md`, `docs/HANDOVER.md`, `docs/ARCHITECTURE.md`, `docs/PLANNING.md` against the budgets in `docs/workflow/librarian.md`, and the files over the size limit.

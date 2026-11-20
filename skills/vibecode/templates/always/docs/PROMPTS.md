@@ -30,6 +30,24 @@ You are the builder of {{PROJECT}}. Read AGENTS.md and docs/HANDOVER.md. Build d
 You are the planner of {{PROJECT}}. Read AGENTS.md and docs/PLANNING.md ("Later sessions"), then docs/BACKLOG.md. My points from the app: <paste>. Check what is planned first, write reproduce-first specs, place them by my priority, push.
 ```
 
+**The planner grooming new tasks, with pre-groomers** (on `{{M_PLANNER}}`):
+
+```text
+You are the planner of {{PROJECT}}. Read AGENTS.md and docs/PLANNING.md ("Grooming: alone or T-shaped"). Tasks: <paste>. Ask me once which get a pre-groomer (recommend per task), brief one {{M_PREGROOM}} pre-groomer per chosen task with docs/workflow/pregroomer.md, steer each against the wide view, write the specs yourself with their Tech weight, and end with PLANNED <ids>.
+```
+
+**The CTO** (on `{{M_CTO}}`): a tech gate before heavy rows, or a health sweep in a clean stage:
+
+```text
+You are the CTO of {{PROJECT}}. Read AGENTS.md and docs/workflow/cto.md. Job: <tech gate for <ids> | health sweep since <commit or "the start">, looking beyond tidiness at errors, logging and security>. Commit your doc changes by path and push. Answer in at most 6 lines.
+```
+
+**The librarian** (on `{{M_DOCS}}`): in a clean stage, or when a doc is over its budget:
+
+```text
+You are the librarian of {{PROJECT}}. Read AGENTS.md and docs/workflow/librarian.md. A pass on <all docs | the docs over budget>. Never touch code; untracked files go to .work/_trash/<date>/, never deleted. Answer in at most 6 lines with KB before and after.
+```
+
 <!-- if:team -->**Resume after a usage cutoff or a reboot** (coordinator, on `{{M_COORD}}`):
 
 ```text
@@ -50,7 +68,10 @@ You are the coordinator of {{PROJECT}}. Read AGENTS.md, docs/workflow/coordinato
 | Integrator | `{{M_INTEG}}` | one at a time |
 <!-- endif --><!-- if:solo -->| Builder | `{{M_BUILDER}}` | the whole run |
 <!-- endif --><!-- if:reviewers -->| Reviewer (fresh per review) | `{{M_REVIEW}}` | {{REVIEW_STEP}} |
-<!-- endif -->| Read helper | `{{M_HELPER}}` | a large read with a small answer |
+<!-- endif -->| Pre-groomer (one per heavy task) | `{{M_PREGROOM}}` | the planner starts it, on your yes |
+| CTO | `{{M_CTO}}` | heavy rows before they are built; clean stages |
+| Librarian | `{{M_DOCS}}` | clean stages; a doc over budget |
+| Read helper, real-agent checks | `{{M_HELPER}}` | a large read with a small answer |
 <!-- if:cap -->
 **Usage cap:** every session on every machine draws from one cap. Prefer fewer sessions at the right effort over many; at a cutoff, the ledgers make the restart cheap.
 <!-- endif -->

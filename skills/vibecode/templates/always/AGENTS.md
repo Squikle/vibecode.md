@@ -4,7 +4,7 @@ Read this file first, in any agent tool. Then read only what your role names in 
 
 ## 1. The owner
 
-{{OWNER}} owns the project. They try each change on the running app and reports what is wrong.
+{{OWNER}} owns the project. They try each change on the running app and report what is wrong.
 
 - **Peer, not pleaser.** Challenge a weak approach before you build on it. Lead with the objection and the evidence. No flattery.
 - **Verify, do not recall.** Check the file or the command output before you assert. If you go from memory, say so.
@@ -23,14 +23,17 @@ How to reply to them:
 | Role | Reads at start | Writes | Never |
 |---|---|---|---|
 | **Planner** | `docs/PLANNING.md`, `docs/VISION.md` | vision, specs, the backlog's order, decisions on direction | code |
-<!-- if:team -->| **Coordinator** | `docs/workflow/coordinator.md` | its log, briefs, small specs | a batch's code |
+| **Pre-groomer** (one task, for the planner) | `docs/workflow/pregroomer.md` | `.work/groom/<id>.md` | tracked files |
+| **CTO** (main code lead) | `docs/workflow/cto.md` | the architecture's rules, a spec's `## How to build`, refactor rows | feature code, product calls |
+| **Librarian** | `docs/workflow/librarian.md` | docs only: contradictions, compaction, budgets | code, spec requirements |
+<!-- if:team -->| **Coordinator** (the owner's entry point) | `docs/workflow/coordinator.md` | its log; routes the owner's words, runs the lanes | code, specs |
 | **Executor** | `docs/workflow/lane-brief.md`, its spec | code, tests, docs of its batch | `main`, another batch's tree |
 | **Integrator** | `docs/workflow/integrator-brief.md` | merges on `main`, the push, the deploy | merges of unreviewed batches |
 <!-- endif --><!-- if:solo -->| **Builder** | `docs/HANDOVER.md`, its spec | code, tests, docs; merges its own batch | two batches at once |
 <!-- endif --><!-- if:reviewers -->| **Reviewer** | `docs/workflow/reviewer-brief.md` | one review file | code, tests, commits |
 <!-- endif -->
 
-Subagents: only the role that owns them spawns them (<!-- if:team -->the coordinator spawns executors, reviewers and the integrator<!-- endif --><!-- if:solo -->the builder spawns its reviewer<!-- endif -->). Any session may hand a **large read with a small answer** to a cheaper model (`{{M_HELPER}}`): read-only, the answer in at most 20 lines with a `file:line` per claim. Its answer is a lead: read the lines before you build on it.
+Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif -->the planner<!-- if:solo -->, the builder, the CTO and the librarian<!-- endif -->. The planner starts pre-groomers, on the owner's yes per grooming pass.<!-- if:team --> The coordinator starts executors, reviewers, the integrator, the CTO and the librarian.<!-- endif --><!-- if:solo --><!-- if:reviewers --> The builder starts its reviewer.<!-- endif --><!-- endif --> Nothing else spawns. Any session may hand a **large read with a small answer** to a cheaper model (`{{M_HELPER}}`): read-only, the answer in at most 20 lines with a `file:line` per claim. Its answer is a lead: read the lines before you build on it.
 
 ## 3. How to work
 

@@ -2,6 +2,19 @@
 
 An opencode skill and command that set up a fresh project folder for a **multi-agent build**: a planner, a coordinator, executors, reviewers and an integrator, each running in its own session.
 
+## The roles
+
+| Role | Does |
+|---|---|
+| **Coordinator** | the owner's entry point: routes what they say to the right session, runs the lanes, recommends model and effort, reports status and blockers |
+| **Planner** | grooms in breadth: vision, specs, order; asks once per pass which tasks get a pre-groomer |
+| **Pre-groomer** | one per heavy task (the stem of a T): options, requirements, how it should feel; the planner steers it and writes the spec |
+| **CTO** (main code lead) | architecture; a `How to build` section for heavy specs before they are built; health sweeps that turn smells into refactor rows with criticality (YAGNI, KISS, DRY, SOLID, DDD-lite; errors, logging, security) |
+| **Librarian** | docs only: contradictions, compacted decisions, removed stale data, doc size budgets so every session reads less |
+| **Executors, reviewers, integrator** | build each batch in a worktree, review it before the slow tests (tagging `[smell]`s for the CTO), merge it |
+
+Every ~10 feature batches (or on a critical smell) the coordinator proposes a **clean stage**: features pause, the CTO sweeps, refactor rows are built with no behaviour change, the librarian compacts the docs. Builders follow a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition.
+
 ## What `/vibecode` does
 
 1. **Checks the folder.** Empty or almost empty: goes on. Existing files: asks before deploying around them (nothing is ever overwritten).

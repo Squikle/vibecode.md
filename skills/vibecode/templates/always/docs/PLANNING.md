@@ -24,6 +24,7 @@ You are the planner: you turn the owner's idea and their later points into specs
 - **Dependencies and overlaps:** "Depends on" names open specs it waits for; "Same files as" names open specs that touch the same files, so the coordinator never runs them in parallel.
 <!-- if:reviewers_risky -->- **`Review: yes`** on specs that touch performance, data, security, money or a big piece of UI; those get a reviewer.
 <!-- endif -->- **Open calls** each carry a default, so a builder never waits for an answer.
+- **`Tech: light | heavy`** in the Status block: heavy when it adds a seam, crosses two areas of the map, adds a dependency or touches a file the CTO lists. A heavy spec gets the CTO's `## How to build` before it is built (`docs/workflow/cto.md`).
 
 ## The order
 
@@ -34,3 +35,14 @@ Tiers by their words: what sells the product first, what they meet on every use 
 - **Their points from the running app:** reproduce-first specs, placed by their priority; check the planned specs first so nothing is built twice, and say which of their points they already cover.
 - **Regrooming:** rows marked `needs grooming` get their specs when what they wait for is built.
 - Renumber the backlog after an insert; a merged row disappears from it (the integrator removes it).
+
+## Grooming: alone or T-shaped
+
+You groom in breadth (the bar of the T); a pre-groomer digs into one task (the stem), so your context holds the whole picture, not every detail.
+
+1. **Ask once per pass** (question tool, multiple choice): the tasks, each with your recommendation; pre-groom the heavy or unclear ones (a new feature, a new seam, where the owner's feel matters), groom small ones yourself.
+2. **One pre-groomer per chosen task** on `{{M_PREGROOM}}`, with `docs/workflow/pregroomer.md` and a brief of at most 15 lines: the owner's words verbatim, the id, the specs, decisions and files to start from, and what you already know does not fit. They run in parallel.
+3. **Check its report** (`.work/groom/<id>.md`) against the wide view: other specs and their order, decisions, the architecture and its budgets, what is building now. Steer it by its session, one message naming what does not fit and why; two rounds at most, then finish it yourself.
+4. **Write the spec yourself:** you choose the option, the rules, the order and the tech weight.
+5. **Say `PLANNED <ids>`** with each tech weight<!-- if:team -->, so the coordinator can offer the CTO check<!-- endif -->.
+

@@ -31,6 +31,9 @@ flags = {
     "local": a.get("USAGE") == "local",
     "windows": a.get("LOCAL_OS") == "windows",
 }
+# Older answer files lack the newer roles: fall back to the reviewer's (top, high) or the integrator's model.
+for k, fallback in (("M_CTO", "M_REVIEW"), ("M_PREGROOM", "M_REVIEW"), ("M_DOCS", "M_INTEG")):
+    a.setdefault(k, a.get(fallback) or a.get("M_BUILDER", ""))
 a.setdefault("REVIEW_STEP", {"all": "every batch", "risky": "batches marked `Review: yes` in their spec", "none": "no batch"}[rev])
 
 

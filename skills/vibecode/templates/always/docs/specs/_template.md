@@ -3,6 +3,7 @@
 Status: ready to build | starts with a reproduction | starts with a measurement | starts with a spike | needs grooming
 Depends on: <open specs it waits for, or "nothing that is open">
 Same files as: <open specs touching the same files, or "none">
+Tech: light | heavy (heavy gets the CTO's "How to build" before it is built)
 <!-- if:reviewers_risky -->Review: yes | no
 <!-- endif -->
 
@@ -26,6 +27,10 @@ The owner's words, quoted and dated. Why it matters to them.
 ## Not in this batch
 
 - What is left out, and which spec has it.
+
+## How to build
+
+(The CTO's, for a heavy spec: where it goes, what to reuse, refactor first or not, contracts, weak spots, tests. Delete for a light one.)
 
 ## Checks
 

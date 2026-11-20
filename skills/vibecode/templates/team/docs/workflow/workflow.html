@@ -2,201 +2,140 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>{{PROJECT}}: how the building run works</title>
+<title>{{PROJECT}}: how the agents work together</title>
 <style>
   :root { --bg:#14161b; --card:#1d2027; --ink:#e6e8ee; --dim:#9aa1ae; --line:#2c313b; --acc:#7cc4ff; }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { padding:28px 40px 8px; }
-  h1 { margin:0 0 4px; font-size:24px; }
-  header p { margin:0; color:var(--dim); }
-  nav { padding:8px 40px 0; display:flex; gap:14px; flex-wrap:wrap; }
-  nav a { color:var(--acc); text-decoration:none; font-size:14px; }
+  header { padding:28px 40px 8px; } h1 { margin:0 0 4px; font-size:24px; } header p { margin:0; color:var(--dim); }
+  nav { padding:8px 40px 0; display:flex; gap:14px; flex-wrap:wrap; } nav a { color:var(--acc); text-decoration:none; font-size:14px; }
   main { padding:12px 40px 60px; display:grid; gap:24px; }
   section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px 24px; }
-  section h2 { margin:0 0 6px; font-size:18px; }
-  section > p { margin:0 0 14px; color:var(--dim); max-width:980px; }
-  .main-flow { border-color:#3b5b7a; }
+  section h2 { margin:0 0 6px; font-size:18px; } section > p { margin:0 0 14px; color:var(--dim); max-width:980px; }
   .mermaid { overflow-x:auto; }
   table { border-collapse:collapse; font-size:14px; margin-top:6px; }
-  th, td { border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top; }
-  th { color:var(--dim); font-weight:600; }
+  th, td { border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top; } th { color:var(--dim); font-weight:600; }
   code { background:#262a33; padding:1px 5px; border-radius:4px; font-size:13px; }
   footer { color:var(--dim); font-size:13px; padding:0 40px 30px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>{{PROJECT}}: how the building run works</h1>
-  <p>A batch goes from the owner's words to the running app: the planner writes it, the coordinator hands it out, the executor builds it, the reviewer judges it, and the integrator merges it.</p>
+  <h1>{{PROJECT}}: how the agents work together</h1>
+  <p>The owner talks to the coordinator. The planner decides what to build (with a pre-groomer per heavy task), the CTO decides how it is built, lanes build it, reviewers judge it, the integrator merges it, the librarian keeps the docs short. Sources: <code>docs/workflow/</code> (coordinator, cto, librarian, pregroomer, briefs), <code>docs/PLANNING.md</code>, <code>docs/HANDOVER.md</code>.</p>
 </header>
 <nav>
-  <a href="#flow">1. A batch's journey (main)</a>
-  <a href="#states">2. A batch's states</a>
-  <a href="#spawn">3. Who spawns whom</a>
-  <a href="#machines">4. Machines, locks, tests</a>
-  </nav>
+  <a href="#roles">1. Who starts whom</a><a href="#big">2. A big task</a><a href="#t">3. T-shaped grooming</a>
+  <a href="#loop">4. The batch loop</a><a href="#stage">5. Clean stages</a><a href="#models">6. Models and efforts</a>
+</nav>
 <main>
-
-<section id="flow" class="main-flow">
-  <h2>1. A batch's journey: from the owner's words to the running app (sequence)</h2>
-  <p>The main flow. Arrows are hand-offs: a spec, a session spawned, a <code>READY FOR REVIEW</code> line, a review file, a report, a push. While a review runs, the executor doesn't wait: it builds its next batch.</p>
-<pre class="mermaid">
+<section id="roles">
+  <h2>1. Who starts whom</h2>
+  <p>The owner starts two sessions: the coordinator (their entry point) and, to plan, the planner. Everything else is started by them. Helpers (a cheap read) can be used by any session.</p>
+  <pre class="mermaid">
+flowchart LR
+  M((Owner)) --> C[Coordinator<br/>entry point]
+  M --> P[Planner]
+  C -->|forwards their words| P
+  P -->|one per heavy task| G[Pre-groomer]
+  C --> CTO[CTO<br/>main code lead]
+  C --> L[Librarian<br/>docs only]
+  C --> E[Lanes<br/>builders]
+  C --> R[Reviewer<br/>fresh per review]
+  C --> I[Integrator]
+  R -. "[smell] tags" .-> CTO
+  I -. "size line" .-> L
+  </pre>
+</section>
+<section id="big">
+  <h2>2. A big task, from the owner's words to the app</h2>
+  <p>The coordinator routes; it asks the owner once whether the CTO checks the planned rows (yes is recommended for every <code>Tech: heavy</code> row).</p>
+  <pre class="mermaid">
 sequenceDiagram
   autonumber
   actor M as Owner
-  participant P as Planner
-  participant GH as origin/main (GitHub)
   participant C as Coordinator
-  participant E as Executor (lane)
-  participant R as Reviewer (fresh)
-  participant T as Tests (under the locks)
-  participant I as Integrator
-  participant B as Running app
-
-  M->>P: idea, then points from the app
-  P->>P: write docs/specs/id.md (What must be true)
-  P->>GH: push spec + BACKLOG row + ROADMAP
-  GH-->>C: new rows in BACKLOG, in order
-
-  C->>E: spawn (lane-brief.md, batch id, worktree, effort)
-  activate E
-  E->>E: plan, unit test first, build, commit per task
-  E->>E: cheap checks only: types, unit, API
-  E->>C: READY FOR REVIEW id base=... head=...
-
-  C->>R: spawn (reviewer-brief.md, id, base, head) at effort high
-  activate R
-  par review runs
-    R->>R: read spec + git diff base...head (read-only)
-    R->>C: verdict + .work/id/review.md
-  and executor goes on
-    E->>E: cut the next batch, build it up to its own READY
-  end
-  deactivate R
-
-  alt GREEN or GREEN WITH NOTES
-    C->>E: review file: fix the notes, no 2nd review
-  else CHANGES NEEDED
-    C->>E: findings (blocker or major)
-    E->>E: fix test-first, answer under "Builder's answers"
-    opt a fix changes what the owner sees, or a rewrite
-      E->>C: READY FOR REVIEW again
-      C->>R: spawn a NEW reviewer (round 2)
-      R->>C: round 2 verdict on top of review.md
-      C->>E: round 2 findings
-    end
-  end
-
-  E->>T: gate: e2e files of the touched areas (lock, any machine)
-  E->>T: performance suite (reference machine), if any
-  T-->>E: green, or reds checked alone and listed
-  opt a red forces a major change
-    E->>C: STOP, major change (coordinator decides on a re-review)
-  end
-  E->>C: DONE head=... + .work/id/report.md
-  deactivate E
-
-  C->>I: merge id (only reviewed batches)
-  activate I
-  I->>I: integrate.py (merge --no-ff, rows, report, decision numbers)
-  I->>T: checks on main: types, unit, API, touched e2e files
-  T-->>I: green, or only listed reds
-  I->>GH: fetch + merge, push main
-  I->>B: deploy
-  I->>GH: ROADMAP "What's new"
-  I->>C: pushed sha + numbers
-  deactivate I
-
-  C->>M: short status
-  M->>B: tries it
-  B-->>M: right, or wrong
-  M-->>P: new points (the loop starts again)
-</pre>
+  participant P as Planner
+  participant G as Pre-groomers
+  participant T as CTO
+  participant E as Lanes
+  M->>C: a feature, feedback, a reorder
+  C->>P: .work/inbox/planner.md (their words, ids)
+  P->>M: which tasks get a pre-groomer? (one question)
+  P->>G: one brief per chosen task
+  G-->>P: .work/groom/id.md (options, requirements, tech weight)
+  P->>G: steer: what does not fit (2 rounds max)
+  P->>P: writes the specs, Tech light or heavy
+  P-->>C: PLANNED ids + tech weights
+  C->>M: CTO check? (recommendation per row)
+  C->>T: tech gate for the heavy rows
+  T-->>C: How to build in each spec, or a refactor row first
+  C->>E: lanes build in order (section 4)
+  </pre>
 </section>
-
-<section id="states">
-  <h2>2. A batch's states</h2>
-  <p>The same journey, seen from the batch. Minor findings never send it back to review; a major one may (the coordinator's call).</p>
-<pre class="mermaid">
-stateDiagram-v2
-  direction LR
-  [*] --> Planned: spec + row pushed
-  Planned --> Building: coordinator assigns a lane
-  Building --> ReadyForReview: types + unit green
-  ReadyForReview --> InReview: fresh reviewer spawned
-  InReview --> Fixing: findings
-  Fixing --> InReview: major change, round 2
-  Fixing --> Gate: notes fixed or answered
-  InReview --> Gate: GREEN
-  Gate --> Fixing: red that is ours
-  Gate --> Done: report written
-  Done --> Merged: integrator, checks on main
-  Merged --> OnBoard: push + redeploy
-  OnBoard --> Planned: the owner's new points
-  OnBoard --> [*]
-</pre>
-</section>
-
-<section id="spawn">
-  <h2>3. Who spawns whom</h2>
-  <p>Only the coordinator spawns. At most {{EXECUTORS}} executors (lanes on a second machine count) and 1 integrator, plus a fresh reviewer per review.</p>
-<pre class="mermaid">
+<section id="t">
+  <h2>3. T-shaped grooming</h2>
+  <p>The planner is the bar: it sees every spec, decision and the order. Each pre-groomer is a stem: it digs into one task with a fresh, small context and writes a report; the planner checks it against the wide view, steers it, and writes the spec itself.</p>
+  <pre class="mermaid">
 flowchart TB
-  M([Owner]) -->|idea, points| PL[Planner session]
-  PL -->|specs + rows| GH[(main / origin)]
-  M -->|"go, wrap up"| C{{Coordinator}}
-  GH --> C
-  C -->|"spawn, medium or high"| E1[Executor lanes<br/>one worktree each]
-  C -->|"opencode run over ssh"| RL[Lanes on machine B]
-  C -->|"spawn per review, high"| RV[Reviewers<br/>read-only]
-  C -->|"spawn, medium"| IN[Integrator]
-  E1 -->|READY / DONE| C
-  RL -->|status.md lines| C
-  RV -->|review.md + verdict| C
-  IN -->|push, deploy| GH
-  IN --> APP[[Running app]]
-  APP --> M
-</pre>
+  P["Planner: all specs, decisions, order, architecture budgets"]
+  P --- G1["Pre-groomer: task A<br/>need, today, options, requirements"]
+  P --- G2["Pre-groomer: task B"]
+  P --- G3["Planner grooms small task C itself"]
+  G1 --> R1[".work/groom/A.md"] --> S1["spec A (planner)"]
+  G2 --> R2[".work/groom/B.md"] --> S2["spec B (planner)"]
+  G3 --> S3["spec C"]
+  </pre>
 </section>
-
-<section id="machines">
-  <h2>4. Machines, locks and where each test runs</h2>
-  <p>Each machine runs one locked e2e run at a time with all its cores; builders spread their e2e files over machines; performance budgets are measured on one reference machine.</p>
-<pre class="mermaid">
+<section id="loop">
+  <h2>4. The batch loop</h2>
+  <p>Review before the slow tests. A design question goes to the CTO, a product question to the planner; the coordinator decides routing and slots.</p>
+  <pre class="mermaid">
 flowchart LR
-  subgraph A["Machine A"]
-    direction TB
-    CO{{Coordinator}}
-    EX[Executors<br/>worktrees]
-    INT[Integrator<br/>main worktree]
-    LA[/.work/e2e.lock/]
-    SA[Test stack A<br/>+ performance suite]
-    EX --> LA --> SA
-    INT --> LA
-  end
-  subgraph B["Machine B (optional)"]
-    direction TB
-    RL[Builder lanes]
-    RW[remote worktrees<br/>A's branches under test]
-    LB[/.work/e2e.lock.d/]
-    SB[Test stack B]
-    RL --> LB
-    RW --> LB --> SB
-  end
-  ORI[(origin)]
-  EX -->|"remote-run.ps1: push HEAD"| RW
-  CO -->|"ssh: start lanes, read status.md"| RL
-  INT -->|push main| ORI
-</pre>
+  A[spec ready<br/>How to build if heavy] --> B[lane builds<br/>types + unit]
+  B -->|READY FOR REVIEW| R{reviewer}
+  R -->|minor| F[lane fixes<br/>no 2nd review]
+  R -->|major| F2[lane fixes<br/>2nd review of that part]
+  R -->|design question| T[CTO]
+  T --> F
+  F --> GT[gate: e2e files, perf]
+  F2 --> GT
+  GT -->|DONE| I[integrator: merge, gate, push,<br/>deploy, roadmap, size line]
+  I --> BD[(running app)]
+  </pre>
 </section>
-</main>
-<footer>Source of truth: <code>docs/workflow/coordinator.md</code>, <code>lane-brief.md</code>, <code>reviewer-brief.md</code>, <code>integrator-brief.md</code>. Mermaid loads from the jsdelivr CDN.</footer>
+<section id="stage">
+  <h2>5. Clean stages</h2>
+  <p>Every ~10 feature batches, on a 🔴 smell, or when known reds keep growing, the coordinator proposes a stage: no new features until the code and docs are clean again. The first one is heavy.</p>
+  <pre class="mermaid">
+flowchart LR
+  S[features paused] --> W[CTO health sweep<br/>refactor rows 🔴🟠🟡]
+  W --> O[planner orders them<br/>the owner sees the list]
+  O --> X[lanes refactor<br/>no behaviour change]
+  X --> D[librarian pass<br/>contradictions, compaction, budgets]
+  D --> Z[features again]
+  </pre>
+</section>
+<section id="models">
+  <h2>6. Models and efforts</h2>
+  <table>
+    <tr><th>Role</th><th>Model</th><th>Reads at start</th></tr>
+    <tr><td>Coordinator</td><td><code>{{M_COORD}}</code></td><td><code>AGENTS.md</code>, <code>docs/workflow/coordinator.md</code>, its log</td></tr>
+    <tr><td>Planner</td><td><code>{{M_PLANNER}}</code></td><td><code>docs/PLANNING.md</code></td></tr>
+    <tr><td>Pre-groomer</td><td><code>{{M_PREGROOM}}</code></td><td><code>docs/workflow/pregroomer.md</code> + its brief</td></tr>
+    <tr><td>CTO</td><td><code>{{M_CTO}}</code></td><td><code>docs/workflow/cto.md</code></td></tr>
+    <tr><td>Librarian</td><td><code>{{M_DOCS}}</code></td><td><code>docs/workflow/librarian.md</code></td></tr>
+    <tr><td>Executor</td><td><code>{{M_EXEC}}</code>; <code>{{M_EXEC_HARD}}</code> when it needs thinking</td><td><code>docs/workflow/lane-brief.md</code>, its spec</td></tr>
+    <tr><td>Reviewer</td><td><code>{{M_REVIEW}}</code></td><td>its brief, the diff</td></tr>
+    <tr><td>Integrator</td><td><code>{{M_INTEG}}</code></td><td>its brief</td></tr>
+    <tr><td>Read helper, real-agent checks</td><td><code>{{M_HELPER}}</code></td><td>its brief</td></tr>
+  </table>
+  <p style="margin-top:12px">Doc budgets (what each session pays at its start): <code>AGENTS.md</code> 10 KB, <code>docs/HANDOVER.md</code>, <code>docs/ARCHITECTURE.md</code> and <code>docs/PLANNING.md</code> 30 KB each (<code>docs/workflow/librarian.md</code>).</p>
+</section></main>
+<footer>Prompts: <code>docs/PROMPTS.md</code>. Models are written <code>provider/model#variant</code>.</footer>
 <script type="module">
-  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-  mermaid.initialize({ startOnLoad: true, theme: "dark", securityLevel: "loose",
-    sequence: { mirrorActors: true, showSequenceNumbers: true, wrap: true, width: 170 },
-    flowchart: { curve: "basis" } });
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+mermaid.initialize({ startOnLoad: true, theme: "dark", securityLevel: "strict" });
 </script>
 </body>
 </html>
