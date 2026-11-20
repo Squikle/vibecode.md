@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{PROJECT}}: how the building run works</title>
+<style>
+  :root { --bg:#14161b; --card:#1d2027; --ink:#e6e8ee; --dim:#9aa1ae; --line:#2c313b; --acc:#7cc4ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding:28px 40px 8px; }
+  h1 { margin:0 0 4px; font-size:24px; }
+  header p { margin:0; color:var(--dim); }
+  nav { padding:8px 40px 0; display:flex; gap:14px; flex-wrap:wrap; }
+  nav a { color:var(--acc); text-decoration:none; font-size:14px; }
+  main { padding:12px 40px 60px; display:grid; gap:24px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px 24px; }
+  section h2 { margin:0 0 6px; font-size:18px; }
+  section > p { margin:0 0 14px; color:var(--dim); max-width:980px; }
+  .main-flow { border-color:#3b5b7a; }
+  .mermaid { overflow-x:auto; }
+  table { border-collapse:collapse; font-size:14px; margin-top:6px; }
+  th, td { border:1px solid var(--line); padding:6px 10px; text-align:left; vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  code { background:#262a33; padding:1px 5px; border-radius:4px; font-size:13px; }
+  footer { color:var(--dim); font-size:13px; padding:0 40px 30px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>{{PROJECT}}: how the building run works</h1>
+  <p>A batch goes from the owner's words to the running app: the planner writes it, the coordinator hands it out, the executor builds it, the reviewer judges it, and the integrator merges it.</p>
+</header>
+<nav>
+  <a href="#flow">1. A batch's journey (main)</a>
+  <a href="#states">2. A batch's states</a>
+  <a href="#spawn">3. Who spawns whom</a>
+  <a href="#machines">4. Machines, locks, tests</a>
+  </nav>
+<main>
+
+<section id="flow" class="main-flow">
+  <h2>1. A batch's journey: from the owner's words to the running app (sequence)</h2>
+  <p>The main flow. Arrows are hand-offs: a spec, a session spawned, a <code>READY FOR REVIEW</code> line, a review file, a report, a push. While a review runs, the executor doesn't wait: it builds its next batch.</p>
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor M as Owner
+  participant P as Planner
+  participant GH as origin/main (GitHub)
+  participant C as Coordinator
+  participant E as Executor (lane)
+  participant R as Reviewer (fresh)
+  participant T as Tests (under the locks)
+  participant I as Integrator
+  participant B as Running app
+
+  M->>P: idea, then points from the app
+  P->>P: write docs/specs/id.md (What must be true)
+  P->>GH: push spec + BACKLOG row + ROADMAP
+  GH-->>C: new rows in BACKLOG, in order
+
+  C->>E: spawn (lane-brief.md, batch id, worktree, effort)
+  activate E
+  E->>E: plan, unit test first, build, commit per task
+  E->>E: cheap checks only: types, unit, API
+  E->>C: READY FOR REVIEW id base=... head=...
+
+  C->>R: spawn (reviewer-brief.md, id, base, head) at effort high
+  activate R
+  par review runs
+    R->>R: read spec + git diff base...head (read-only)
+    R->>C: verdict + .work/id/review.md
+  and executor goes on
+    E->>E: cut the next batch, build it up to its own READY
+  end
+  deactivate R
+
+  alt GREEN or GREEN WITH NOTES
+    C->>E: review file: fix the notes, no 2nd review
+  else CHANGES NEEDED
+    C->>E: findings (blocker or major)
+    E->>E: fix test-first, answer under "Builder's answers"
+    opt a fix changes what the owner sees, or a rewrite
+      E->>C: READY FOR REVIEW again
+      C->>R: spawn a NEW reviewer (round 2)
+      R->>C: round 2 verdict on top of review.md
+      C->>E: round 2 findings
+    end
+  end
+
+  E->>T: gate: e2e files of the touched areas (lock, any machine)
+  E->>T: performance suite (reference machine), if any
+  T-->>E: green, or reds checked alone and listed
+  opt a red forces a major change
+    E->>C: STOP, major change (coordinator decides on a re-review)
+  end
+  E->>C: DONE head=... + .work/id/report.md
+  deactivate E
+
+  C->>I: merge id (only reviewed batches)
+  activate I
+  I->>I: integrate.py (merge --no-ff, rows, report, decision numbers)
+  I->>T: checks on main: types, unit, API, touched e2e files
+  T-->>I: green, or only listed reds
+  I->>GH: fetch + merge, push main
+  I->>B: deploy
+  I->>GH: ROADMAP "What's new"
+  I->>C: pushed sha + numbers
+  deactivate I
+
+  C->>M: short status
+  M->>B: tries it
+  B-->>M: right, or wrong
+  M-->>P: new points (the loop starts again)
+</pre>
+</section>
+
+<section id="states">
+  <h2>2. A batch's states</h2>
+  <p>The same journey, seen from the batch. Minor findings never send it back to review; a major one may (the coordinator's call).</p>
+<pre class="mermaid">
+stateDiagram-v2
+  direction LR
+  [*] --> Planned: spec + row pushed
+  Planned --> Building: coordinator assigns a lane
+  Building --> ReadyForReview: types + unit green
+  ReadyForReview --> InReview: fresh reviewer spawned
+  InReview --> Fixing: findings
+  Fixing --> InReview: major change, round 2
+  Fixing --> Gate: notes fixed or answered
+  InReview --> Gate: GREEN
+  Gate --> Fixing: red that is ours
+  Gate --> Done: report written
+  Done --> Merged: integrator, checks on main
+  Merged --> OnBoard: push + redeploy
+  OnBoard --> Planned: the owner's new points
+  OnBoard --> [*]
+</pre>
+</section>
+
+<section id="spawn">
+  <h2>3. Who spawns whom</h2>
+  <p>Only the coordinator spawns. At most {{EXECUTORS}} executors (lanes on a second machine count) and 1 integrator, plus a fresh reviewer per review.</p>
+<pre class="mermaid">
+flowchart TB
+  M([Owner]) -->|idea, points| PL[Planner session]
+  PL -->|specs + rows| GH[(main / origin)]
+  M -->|"go, wrap up"| C{{Coordinator}}
+  GH --> C
+  C -->|"spawn, medium or high"| E1[Executor lanes<br/>one worktree each]
+  C -->|"opencode run over ssh"| RL[Lanes on machine B]
+  C -->|"spawn per review, high"| RV[Reviewers<br/>read-only]
+  C -->|"spawn, medium"| IN[Integrator]
+  E1 -->|READY / DONE| C
+  RL -->|status.md lines| C
+  RV -->|review.md + verdict| C
+  IN -->|push, deploy| GH
+  IN --> APP[[Running app]]
+  APP --> M
+</pre>
+</section>
+
+<section id="machines">
+  <h2>4. Machines, locks and where each test runs</h2>
+  <p>Each machine runs one locked e2e run at a time with all its cores; builders spread their e2e files over machines; performance budgets are measured on one reference machine.</p>
+<pre class="mermaid">
+flowchart LR
+  subgraph A["Machine A"]
+    direction TB
+    CO{{Coordinator}}
+    EX[Executors<br/>worktrees]
+    INT[Integrator<br/>main worktree]
+    LA[/.work/e2e.lock/]
+    SA[Test stack A<br/>+ performance suite]
+    EX --> LA --> SA
+    INT --> LA
+  end
+  subgraph B["Machine B (optional)"]
+    direction TB
+    RL[Builder lanes]
+    RW[remote worktrees<br/>A's branches under test]
+    LB[/.work/e2e.lock.d/]
+    SB[Test stack B]
+    RL --> LB
+    RW --> LB --> SB
+  end
+  ORI[(origin)]
+  EX -->|"remote-run.ps1: push HEAD"| RW
+  CO -->|"ssh: start lanes, read status.md"| RL
+  INT -->|push main| ORI
+</pre>
+</section>
+</main>
+<footer>Source of truth: <code>docs/workflow/coordinator.md</code>, <code>lane-brief.md</code>, <code>reviewer-brief.md</code>, <code>integrator-brief.md</code>. Mermaid loads from the jsdelivr CDN.</footer>
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  mermaid.initialize({ startOnLoad: true, theme: "dark", securityLevel: "loose",
+    sequence: { mirrorActors: true, showSequenceNumbers: true, wrap: true, width: 170 },
+    flowchart: { curve: "basis" } });
+</script>
+</body>
+</html>
