@@ -70,6 +70,8 @@ for group in ["always", "team", "solo", "reviewers", "e2e", "remote"]:
                 dst.write_text("\n".join(have + new) + "\n", encoding="utf-8", newline="\n")
                 created.append(str(dst.relative_to(target)) + " (lines added)")
             continue
+        if rel.parts[0] == "dot-opencode":  # kept un-dotted here so opencode never loads the templates as config
+            rel = pathlib.Path(".opencode", *rel.parts[1:])
         dst = target / rel
         if dst.exists():
             skipped.append(str(rel))

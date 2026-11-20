@@ -13,6 +13,8 @@ An opencode skill and command that set up a fresh project folder for a **multi-a
 | **Librarian** | docs only: contradictions, compacted decisions, removed stale data, doc size budgets so every session reads less |
 | **Executors, reviewers, integrator** | build each batch in a worktree, review it before the slow tests (tagging `[smell]`s for the CTO), merge it |
 
+Every role also gets an opencode command in the new project (`/coordinator`, `/planner`, `/cto`, `/librarian`, `/pregroom`, `/reviewer` or `/builder`), each with its model, so you can talk to any of them in a new session. Role sessions are held and compacted (`opencode api post /api/session/<id>/compact`) instead of respawned, so they keep what they read.
+
 Every ~10 feature batches (or on a critical smell) the coordinator proposes a **clean stage**: features pause, the CTO sweeps, refactor rows are built with no behaviour change, the librarian compacts the docs. Builders follow a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition.
 
 ## What `/vibecode` does

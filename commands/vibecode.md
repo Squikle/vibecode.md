@@ -1,5 +1,5 @@
 ---
-description: Set up this folder for an agent-built project (planner, coordinator, executors, reviewers, integrator)
+description: Set up this folder for an agent-built project (coordinator, planner with pre-groomers, CTO, librarian, executors, reviewers, integrator)
 subagent: false
 ---
 

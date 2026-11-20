@@ -1,6 +1,6 @@
 # The prompts that start each session
 
-Start a new opencode session in this folder, pick the model named, and paste the prompt.<!-- if:team --> The coordinator writes the prompts of the sessions it spawns itself (`docs/workflow/coordinator.md`).<!-- endif -->
+Start a new opencode session in this folder, pick the model named, and paste the prompt; or type the role's command, which sets the model for you: `/planner`, `/cto`, `/librarian`, `/pregroom`<!-- if:team -->, `/coordinator`<!-- endif --><!-- if:solo -->, `/builder`<!-- endif --><!-- if:reviewers -->, `/reviewer`<!-- endif -->.<!-- if:team --> The coordinator writes the prompts of the sessions it spawns itself (`docs/workflow/coordinator.md`).<!-- endif -->
 
 ## Start here
 
