@@ -55,6 +55,7 @@ Then spawn the integrator if something waits for a merge, and the executors from
 | a feature, feedback from the app, a reorder, "plan X" | the planner (below) |
 | a bug with clear steps in one area | an executor as a fix, with their words; unclear cause: the planner verifies first |
 | "why is the code like this", slow, messy, "refactor", a red that keeps coming back | the CTO |
+| "what does X say", "where is Y", "was Z decided" | a small-model lookup (`/ask`, or your subagent on `{{M_HELPER}}` with its brief): it greps and answers in 10 lines with `file:line`; never the librarian |
 | docs that contradict, "clean up the docs", a doc grown too long | the librarian |
 | "status", "what waits for me" | you: your log; remind them of what waits for their word, oldest first |
 | a point that contradicts a batch in flight | that executor, at once |
@@ -104,6 +105,7 @@ Its prompt: "You are lane <name> of {{PROJECT}} on machine B. Read {{REMOTE_PATH
 ## Wrap up, cutoffs
 
 - **"Wrap up":** tell every session to commit its WIP, write next steps in its ledger and start nothing new; then write `.work/RESUME.md`: per batch its branch, head, state and next step; per machine what runs; "first actions" for the next coordinator.
+- **Cheapest tool first:** a script or `grep` (free) → a small-model helper (a lookup, a summary of a long file or log) → a larger model only for judgment. **Check every machine on every report** with one command; an idle lane is the most expensive state.
 - **Hold role sessions; don't respawn them.** One CTO and one librarian session per stage, each next job sent to the same session id (it keeps what it read); small doc fixes wait for the librarian's next pass. Next job soon (cache warm, ~5 min) and the same docs: resume as is. A longer gap: compact it first (`opencode api post /api/session/<id>/compact --data '{}'`, works on subagent sessions), then resume. A fresh session when the job reads different things. Reviewers stay fresh.
 - **Subagents are opencode sessions already** (resumable, compactable). The built-in `general` subagent cannot start subagents: a planner that starts pre-groomers runs as its own session (`/planner`).
 - **The owner can start any role** with its command in a new session (`/coordinator`, `/planner`, `/cto`, `/librarian`, `/pregroom`<!-- if:reviewers -->, `/reviewer`<!-- endif -->).
