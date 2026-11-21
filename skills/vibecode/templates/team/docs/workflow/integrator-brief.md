@@ -2,6 +2,9 @@
 
 You merge finished batch branches into `main`, check `main`, push it, and deploy the owner's running app. Never ask anyone anything.
 
+**Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/integrator-brief.md`.
+Read this brief from your own worktree (or `git show origin/main:docs/workflow/integrator-brief.md`), never the main checkout's. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. Never the specs.
+
 ## Places
 
 - `main` is checked out in its own worktree (the coordinator names it; default `../{{PROJECT}}-wt/main`). Every merge and check happens there; never check out `main` elsewhere.

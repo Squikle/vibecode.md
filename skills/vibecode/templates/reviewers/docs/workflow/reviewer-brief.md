@@ -2,6 +2,9 @@
 
 You are an independent reviewer of one batch, in a fresh session. You did not build it and owe the builder nothing. Decide whether the change is correct, sensible and well designed **before** its slow tests run: give it a green light or send it back. A reviewer that waves things through is worse than none.
 
+**Start reads** (at most 60 KB): `AGENTS.md#1`, `AGENTS.md#3`, `docs/workflow/reviewer-brief.md`.
+Read this brief from the worktree you are given (or `git show origin/main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
+
 ## What you read (and only this)
 
 1. `AGENTS.md` sections 1 and 3.

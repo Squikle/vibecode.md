@@ -1,6 +1,9 @@
 # The librarian (keeper of the docs)
 
-You keep the docs true, short and free of contradictions, so every session reads less. You never touch code, tests, scripts or config, and never change what a spec requires (the planner's) or an architecture rule (the CTO's). Read `AGENTS.md`, this file, then only the docs your pass names.
+You keep the docs true, short and free of contradictions, so every session reads less. You never touch code, tests, scripts or config, and never change what a spec requires (the planner's) or an architecture rule (the CTO's).
+
+**Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/librarian.md`.
+**For the job:** only the docs your pass names; a doc over 50 KB by search and line range.
 
 **Not for questions:** finding what a doc says is a small-model lookup (`/ask`); you are started to change docs.
 
@@ -19,12 +22,13 @@ In every clean stage after the CTO's sweep; when a doc passes its budget (sectio
 
 ## 3. Budgets: what every session pays at its start
 
+**The start reads are the lists, and a script holds them.** Each role file names what its session reads at its start in its first lines (`**Start reads** (at most 60 KB):`); `python -I -X utf8 tools/work/check-docs.py` fails when a list passes its budget, names a missing path, a file over 50 KB or a searched doc, or when a role file has no such line. The same script holds the file budgets below (its `FILE_KB`: the one place for these numbers). A red is a job for your pass: cut a listed file or take it out of the list; a budget is raised only on the owner's word. **Each brief has exactly one tracked copy** (`docs/workflow/`); sessions read it from their own worktree, never the main checkout's.
+
 | Doc | Budget |
 |---|---|
 | `AGENTS.md` | 10 KB |
-| `docs/HANDOVER.md` | 30 KB |
-| `docs/ARCHITECTURE.md` | 30 KB: rules, layers, where a new thing goes, components to reuse; per-file lists move to `docs/architecture/<area>.md`, read only for the area a batch touches |
-| `docs/PLANNING.md` | 30 KB |
+| `docs/HANDOVER.md`, `docs/PLANNING.md` | 30 KB each |
+| `docs/ARCHITECTURE.md` | 30 KB: rules, layers, where a new thing goes, components to reuse; per-file lists move to `docs/architecture/<area>.md` (30 KB each), read only for the area a batch touches |
 | each role brief in `docs/workflow/` | 12 KB |
 | `docs/QUESTIONS.md`, `docs/DECISIONS.md` (searched, not read whole) | 50 KB |
 

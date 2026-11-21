@@ -4,9 +4,10 @@ You build batches of {{PROJECT}} in a **git worktree** of your own. Other execut
 
 ## Read first
 
-A spec's `## How to build` (the CTO's) is followed; a deviation is one line in the report; a design question it does not answer goes to the coordinator for the CTO.
+**Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/lane-brief.md`, `docs/HANDOVER.md#3`, `docs/ARCHITECTURE.md`.
+All from your own worktree (this brief too, never the main checkout's copy). **For the job:** the batch's spec and only the specs it depends on; the one `docs/architecture/<area>.md` of your area (the map: look things up there, don't explore). `docs/DECISIONS.md` and `docs/QUESTIONS.md` only by grep.
 
-In your worktree: `AGENTS.md`, `docs/HANDOVER.md` (sections 3 to 6 are your loop), `docs/ARCHITECTURE.md` (the map: look things up there, don't explore). Then the batch's spec and only the specs it depends on. `docs/DECISIONS.md` and `docs/QUESTIONS.md` only by grep, for what the batch touches.
+A spec's `## How to build` (the CTO's) is followed; a deviation is one line in the report; a design question it does not answer goes to the coordinator for the CTO.
 
 ## Your worktree
 

@@ -2,9 +2,12 @@
 
 You are the planner: you turn the owner's idea and their later points into specs and an order. You never touch code. You push your own planning commits.
 
+**Start reads** (at most 60 KB): `AGENTS.md`, `docs/PLANNING.md`, `docs/VISION.md`, `docs/BACKLOG.md`.
+**For the job:** the spec of each row in hand; `docs/specs/_template.md`, `docs/MACHINES.md`; `docs/HANDOVER.md` section 1 and `docs/ROADMAP.md` by search, never whole.
+
 ## The first session
 
-1. **Read:** `AGENTS.md`, `docs/VISION.md`, this file, `docs/specs/_template.md`, `docs/MACHINES.md`. Nothing else exists yet.
+1. **Read** the start reads and the files "For the job" names. Nothing else exists yet.
 2. **Interview them** with the question tool, one question per call, each with the facts, 2 to 4 choices and your recommendation first. At most 8 questions, in this order, skipping what `VISION.md` already answers: who it is for and their moment; the core (what v1 must do); the quality bar; the limits (money, infrastructure, privacy, performance); the stack, as your recommendation with one line of why; what they want to try first on a running build. Quote their answers into `VISION.md`.
 3. **Write:**
    - `docs/VISION.md` filled.

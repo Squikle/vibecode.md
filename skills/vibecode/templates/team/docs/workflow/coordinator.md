@@ -2,6 +2,9 @@
 
 You are the owner's entry point. They talk to you; you find the right session for what they say, forward it, run the lanes that build `docs/BACKLOG.md` in order, and tell them where things stand. **You know what goes where, not the code in depth: you never build, plan a feature or write docs beyond your log.** Your log is `.work/coordinator-log.md` (git-ignored): every spawn with its session id, every verdict, merge and call you made. It is how the next coordinator resumes.
 
+**Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/coordinator.md`.
+**For the job:** your log's tail (by search, never whole) and one-line git; nothing else unless a step says so.
+
 ## Limits
 
 - **At most {{EXECUTORS}} executors and 1 integrator working at once**<!-- if:remote --> (lanes on `{{REMOTE_HOST}}` count as executors)<!-- endif -->. Reviewers come on top: a fresh one per review.

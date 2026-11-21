@@ -1,6 +1,6 @@
 # {{PROJECT}}: rules for every AI session
 
-Read this file first, in any agent tool. Then read only what your role names in `docs/PROMPTS.md`. Everything about how this project is built lives in this folder.
+Read this file first, in any agent tool. Then your role's file (section 2) and the start reads its first lines name (`**Start reads**`, at most 60 KB in total); what a job adds is named beside them (`**For the job:**`). Everything about how this project is built lives in this folder.
 
 ## 1. The owner
 
@@ -22,14 +22,14 @@ How to reply to them:
 
 | Role | Reads at start | Writes | Never |
 |---|---|---|---|
-| **Planner** | `docs/PLANNING.md`, `docs/VISION.md` | vision, specs, the backlog's order, decisions on direction | code |
+| **Planner** | `docs/PLANNING.md` | vision, specs, the backlog's order, decisions on direction | code |
 | **Pre-groomer** (one task, for the planner) | `docs/workflow/pregroomer.md` | `.work/groom/<id>.md` | tracked files |
 | **CTO** (main code lead) | `docs/workflow/cto.md` | the architecture's rules, a spec's `## How to build`, refactor rows | feature code, product calls |
 | **Librarian** | `docs/workflow/librarian.md` | docs only: contradictions, compaction, budgets | code, spec requirements |
 <!-- if:team -->| **Coordinator** (the owner's entry point) | `docs/workflow/coordinator.md` | its log; routes the owner's words, runs the lanes | code, specs |
-| **Executor** | `docs/workflow/lane-brief.md`, its spec | code, tests, docs of its batch | `main`, another batch's tree |
+| **Executor** | `docs/workflow/lane-brief.md` | code, tests, docs of its batch | `main`, another batch's tree |
 | **Integrator** | `docs/workflow/integrator-brief.md` | merges on `main`, the push, the deploy | merges of unreviewed batches |
-<!-- endif --><!-- if:solo -->| **Builder** | `docs/HANDOVER.md`, its spec | code, tests, docs; merges its own batch | two batches at once |
+<!-- endif --><!-- if:solo -->| **Builder** | `docs/HANDOVER.md` | code, tests, docs; merges its own batch | two batches at once |
 <!-- endif --><!-- if:reviewers -->| **Reviewer** | `docs/workflow/reviewer-brief.md` | one review file | code, tests, commits |
 <!-- endif -->
 
@@ -57,7 +57,8 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Shared dependency folders** (a `node_modules` linked into worktrees, a shared venv): never install into them from a worktree. If one looks broken, stop and say so in one line; only the coordinator<!-- if:solo --> (or the builder, in the main tree)<!-- endif --> reinstalls.
 <!-- if:e2e -->- **Heavy tests run through the lock** (`tools/work/lock.ps1` / `lock.sh`): one run per machine at a time, short (only the files you need), always naming the test files.
 <!-- endif -->- **Non-ASCII text never goes through a shell pipe into a file:** use the file tools or a script file. Python run with `-I` ignores `PYTHON*` variables: use `-X utf8`.
-- **Keep each file's line endings;** never rewrite a whole file's endings in a commit.
+- **Keep each file's line endings;** never rewrite a whole file's endings in a commit. `.gitattributes` pins them (one ending per file type).
+- **Each brief has one tracked copy** in `docs/workflow/`; read it from your own worktree, never the main checkout's. Copies elsewhere go stale.
 - **Never change git config** in a worktree.
 - **`.work/` is git-ignored run state.** Reviews, reports, locks and shared logs live in the **main checkout's** `.work/` (the folder holding `.git`); a worktree's own `.work/` holds only its ledgers (`.work/<id>/progress.md`).
 

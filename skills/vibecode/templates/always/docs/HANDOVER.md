@@ -1,6 +1,9 @@
 # Handover: the state of the work and how a batch is built
 
-## 1. Built so far
+<!-- if:solo -->**Start reads** (at most 60 KB): `AGENTS.md`, `docs/HANDOVER.md`, `docs/ARCHITECTURE.md`.
+**For the job:** the batch's spec and the specs it depends on; the one `docs/architecture/<area>.md` of its area.
+
+<!-- endif -->## 1. Built so far
 
 | Batch | What it gave |
 |---|---|
@@ -48,7 +51,8 @@ The `bootstrap` batch fills this section with exact commands.
 <!-- if:e2e -->| e2e, one file, under the lock | `pwsh -File tools/work/lock.ps1 -Name e2e -Who <id> -Cmd "<bring the test stack up>; <run the named files>"` |
 <!-- endif --><!-- if:perf -->| Performance suite (reference machine only) | |
 <!-- endif --><!-- if:remote -->| e2e on the second machine | `pwsh -File tools/work/remote-run.ps1 -Id <id> -Cmd "<same as above, bash>"` (tests the committed HEAD) |
-<!-- endif -->| The gate on `main` | |
+<!-- endif -->| Doc budgets and start reads | `python -I -X utf8 tools/work/check-docs.py` |
+| The gate on `main` | |
 
 <!-- if:e2e -->**Loading the machines:** each machine runs one locked e2e run at a time, with the test runner's workers set from `docs/MACHINES.md` (about cores minus 2). Builders run only their files; the integrator runs the touched areas. A test stack is shared by all worktrees of a machine: every locked command starts by bringing it up from the caller's tree. Never take a stack down while others may use it.
 <!-- endif -->
