@@ -13,7 +13,7 @@ You are the owner's entry point. They talk to you; you find the right session fo
   | Session | Model |
   |---|---|
   | Executor, well-defined / design, performance, unclear | `{{M_EXEC}}` / `{{M_EXEC_HARD}}` |
-  | Reviewer (fresh per review) | `{{M_REVIEW}}` |
+  | Reviewer (fresh per review); a delta review of docs or tools only | `{{M_REVIEW}}`; `{{M_REVIEW_DELTA}}` (code reviews stay on the top model) |
   | Integrator | `{{M_INTEG}}` |
   | CTO (tech gate / health sweep) | `{{M_CTO}}` |
   | Librarian | `{{M_DOCS}}` |
@@ -44,10 +44,10 @@ Then spawn the integrator if something waits for a merge, and the executors from
 ## The loop per batch
 
 1. **Spawn the executor** (template below). It builds, runs the cheap checks, and answers `READY FOR REVIEW <id> base=<sha> head=<sha>`<!-- if:!reviewers --> — with no reviewers configured it goes straight on to its gate<!-- endif -->. It goes on with its next batch meanwhile.
-<!-- if:reviewers -->2. **Spawn a fresh reviewer** for {{REVIEW_STEP}} (template below). Verdicts: `GREEN` · `GREEN WITH NOTES` (fix, no second review) · `CHANGES NEEDED`.
-3. **Send the findings** to the executor in one message with your calls on them. **A second review** when a fix is a rewrite, a new approach or changes what the owner sees; not when it is a directed small fix. A reviewer's UNVERIFIED claim: the executor measures it first.
-<!-- endif -->4. **The gate and the report** are the executor's (`docs/workflow/lane-brief.md`). It answers `DONE <id> head=<sha>` with numbers.
-5. **The integrator** merges done batches one at a time, in backlog order; a chain merges as one with all its ids. It pushes, deploys, and writes the roadmap's "What's new".
+<!-- if:reviewers -->2. **Spawn a fresh reviewer** for {{REVIEW_STEP}} (template below; the executor's worktree path in it). **No blocker or major** (`GREEN`, `GREEN WITH NOTES`): the reviewer fixes its own minors and nits there, runs the gate and answers `READY TO MERGE <id> head=<sha>`; the executor, retired at its last READY, is not resumed.
+3. **A real blocker or major** goes back to the executor, who knows the design: resume it (warm, at most 125k) or start a fresh one with a pointer brief, and send the findings with your calls on them. Then a **fresh reviewer for the delta only**, round 2 (`review-2.md`); a rewrite or a change the owner sees always gets it. A trivial major (a one-line test fix) the first reviewer fixes itself. A reviewer's UNVERIFIED claim: the executor measures it first.
+<!-- endif -->4. **The gate and the report:** a reviewed batch's gate is the reviewer's; otherwise the executor's (`docs/workflow/lane-brief.md`), which answers `DONE <id> head=<sha>` with numbers.
+5. **The integrator** (a short-lived one, see below) merges `READY TO MERGE` / `DONE` batches in backlog order; a chain merges as one with all its ids. It pushes, deploys when code changed, and writes the roadmap's "What's new".
 6. **Tell the owner** after each merge: what to try, in a few lines.
 7. **Keep `docs/ROADMAP.md`'s marks true** (rules at its end): 🔨 with who builds it when you start a batch, 🔀 when it is reviewed and gated, ⏸ when it waits for them. Commit these small updates from the main worktree between merges, or hand them to the integrator with its next merge.
 
@@ -84,7 +84,7 @@ You are executor <E#> of {{PROJECT}}. Read AGENTS.md and docs/workflow/lane-brie
 ```
 <!-- if:reviewers -->**Reviewer** (fresh each time):
 ```text
-You review one batch of {{PROJECT}}. Read docs/workflow/reviewer-brief.md and follow it exactly (read-only). Batch <id>; worktree <path> or refs only; diff <base>...<head>; spec docs/specs/<id>.md (or done/). Round <n> (put round 2 on top of the same review file, round 1 below). Write .work/<id>/review.md. Answer in at most 8 lines.
+You review one batch of {{PROJECT}}. Read docs/workflow/reviewer-brief.md and follow it exactly (read-only). Batch <id>; executor's worktree <path>; diff <base>...<head>; spec docs/specs/<id>.md (or done/). Round <n> (round 2: only the delta <old head>...<new head>). Write .work/<id>/review.md (round 2: review-2.md). Then, by the brief, fix your own minors and answer READY TO MERGE. At most 8 lines.
 ```
 <!-- endif -->**CTO** (`{{M_CTO}}`):
 ```text
@@ -102,7 +102,7 @@ You are the integrator of {{PROJECT}}. Read AGENTS.md and docs/workflow/integrat
 ```bash
 cd <remote worktree> && nohup opencode run --auto -m '<provider/model#variant>' --title <lane> "$(cat /tmp/prompt-<lane>.txt)" > /tmp/lane-<lane>.log 2>&1 < /dev/null &
 ```
-Its prompt: "You are lane <name> of {{PROJECT}} on machine B. Read {{REMOTE_PATH}}/docs/workflow/remote-brief.md. Worktree <path>. Queue: <ids>, each up to READY FOR REVIEW. Then `LANE <name> PAUSED for review` and end." A lane cannot be messaged mid-run: copy its review files to `{{REMOTE_PATH}}/.work/<id>/` and start it again with the findings. Before a lane needs new specs, push `origin/main` to B (`docs/MACHINES.md`).
+Its prompt: "You are lane <name> of {{PROJECT}} on machine B. Read {{REMOTE_PATH}}/docs/workflow/remote-brief.md. Worktree <path>. Queue: <ids>, each up to READY FOR REVIEW. Then `LANE <name> PAUSED for review` and end." A lane cannot be messaged mid-run. Its reviewer works in the lane's worktree on B (start it there, `opencode run` as above). Only a real major goes back to the lane: copy the review files to `{{REMOTE_PATH}}/.work/<id>/` and start it again with the findings. Before a lane needs new specs, push `origin/main` to B (`docs/MACHINES.md`).
 <!-- endif -->
 
 ## Wrap up, cutoffs

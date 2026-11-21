@@ -72,19 +72,19 @@ flowchart TB
 
 ### 4. The batch loop
 
-Review before the slow tests. A design question goes to the CTO, a product question to the planner; the coordinator decides routing and slots.
+Review before the slow tests. A green or green-with-notes review ends in the reviewer's own fixes and gate, so the executor retires at READY FOR REVIEW; only a real major goes back to it, and a fresh reviewer then checks the delta only (docs or tools only: on the mid model). A reviewer averages ~44k context per call, an executor 86-148k. A design question goes to the CTO, a product question to the planner.
 
 ```mermaid
 flowchart LR
-  A[spec ready<br/>How to build if heavy] --> B[executor builds<br/>types + unit tests]
-  B -->|READY FOR REVIEW| R{reviewer}
-  R -->|minor| F[executor fixes<br/>no 2nd review]
-  R -->|major| F2[executor fixes<br/>2nd review of that part]
+  A["spec ready<br/>How to build if heavy"] --> B["executor builds<br/>types + unit, docs, report"]
+  B -->|"READY FOR REVIEW<br/>(executor retires)"| R{reviewer}
+  R -->|"green, or only minors and nits"| F["reviewer fixes its own notes<br/>in the executor's worktree, runs the gate"]
+  F -->|"READY TO MERGE"| I["integrator: merge, gate, push,<br/>deploy, roadmap, size line"]
+  R -->|"real blocker or major"| E2["executor fixes<br/>(it knows the design)"]
+  E2 -->|"READY FOR REVIEW"| R2{"fresh reviewer<br/>delta only"}
+  R2 --> F
   R -->|design question| T[CTO]
-  T --> F
-  F --> GT[gate: e2e files, perf]
-  F2 --> GT
-  GT -->|DONE| I[integrator: merge, gate, push,<br/>deploy, roadmap, size line]
+  T --> E2
   I --> APP[(running app)]
 ```
 

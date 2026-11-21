@@ -30,7 +30,7 @@ You own how the code is built: its architecture, its health and the technical sh
 
 ## 3. Health sweep
 
-**Signals, cheap first** (`grep`, `git log --name-only`, a symbol tool's outline; a big read goes to a small-model helper): reviewers' `[smell]` findings since the last sweep; churn (files changed in most batches, a function fixed three times); sizes near the limits; the same shape in three places; red tests that keep coming back.
+**Signals, cheap first** (`grep`, `git log --name-only`, a symbol tool's outline; a big read goes to a small-model helper): reviewers' `[smell]` findings in `.work/*/review*.md` since the last sweep. **Review causes:** every ~10 merged batches, count the cause tags of the blockers and majors (`[spec-gap]` `[no-test]` `[timing]` `[at-limit]` `[drift]` `[other]`); a cause that repeats becomes a rule (in the planner's spec template, the lane brief or `AGENTS.md`) or a refactor row. Also: churn (files changed in most batches, a function fixed three times); sizes near the limits; the same shape in three places; red tests that keep coming back.
 
 **Each finding is a refactor row:** criticality 🔴 (bugs or repeated fixes come from it now) · 🟠 (the next feature in this area will hurt) · 🟡 (tidy when passing by); the cost of waiting in one line; the change (cut, merge, move, split) and the target shape; the gate: no behaviour change, the whole gate green with no expectation edited.
 

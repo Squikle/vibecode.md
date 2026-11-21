@@ -21,4 +21,4 @@ You build batches of {{PROJECT}} in a git worktree on machine B (`docs/MACHINES.
 | your queue is at review | `LANE <name> PAUSED for review` (then end your run) |
 | queue done | `LANE <name> FINISHED` |
 
-You can't be messaged during a run: the coordinator starts you again with the review (`{{REMOTE_PATH}}/.work/<id>/review.md`). Address every finding, run the gate, report, write `DONE`.
+You can't be messaged during a run. A reviewer fixes its own minors in your worktree and runs the gate, so you end at `PAUSED for review`. Only a real blocker or major starts you again, with the review (`{{REMOTE_PATH}}/.work/<id>/review*.md`, the highest round): fix it or answer it, write `READY FOR REVIEW` again.
