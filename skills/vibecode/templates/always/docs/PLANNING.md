@@ -35,11 +35,18 @@ You are the planner: you turn the owner's idea and their later points into specs
 
 Tiers by their words: what sells the product first, what they meet on every use next, upkeep and speed last. Within a tier, small fixes they asked for go before big new work. Say why in one line per tier at the top of `docs/BACKLOG.md`.
 
+**Built work goes first** (it outranks the order above; the coordinator's side is in `docs/workflow/coordinator.md`):
+
+1. **A built branch outranks an unstarted row.** A batch whose branch is built (READY, reviewed, or a port of built work) is merged or ported before any lane starts a row that is not built, unless the owner says otherwise.
+2. **A dependency must be real, in code:** the other row changes the same behaviour, or the merge cannot pass without it. "Tidier after the split" or "best after X" is a note for `How to build`, never a `Depends on`. A file at its line limit is solved by a new file in the batch, not by waiting.
+3. **A real blocker of built work is next:** if built work waits on an unbuilt row, that row moves to the top and starts at once.
+4. **A branch gets old fast:** a built branch more than 1 day or 200 commits behind `main` is flagged in the coordinator's next report with the reason it waits (`git rev-list --count <branch>..origin/main`; `git log -1 --format=%cs <branch>`); recheck that reason the same day.
+
 ## Later sessions
 
 - **Their points from the running app:** reproduce-first specs, placed by their priority; check the planned specs first so nothing is built twice, and say which of their points they already cover.
 - **Regrooming:** rows marked `needs grooming` get their specs when what they wait for is built.
-- Renumber the backlog after an insert; a merged row disappears from it (the integrator removes it).
+- Renumber the backlog after an insert; a merged row disappears from it (the integrator removes it). Edit the backlog with a small script that asserts each string it replaces exists exactly once, then diff the sorted rows against the last commit and read every changed line: a script that keys rows by their first word loses rows that share it.
 
 ## Grooming: alone or T-shaped
 

@@ -37,6 +37,7 @@ Then spawn the integrator if something waits for a merge, and the executors from
 
 ## Picking work
 
+- **Built work goes first** (`docs/PLANNING.md`, "The order"): a built branch is merged before a lane starts an unbuilt row; a real blocker of built work starts at once; **every report flags any built branch more than 1 day or 200 commits behind `main`**, with its reason.
 - Top-down. A row runs in parallel with the running ones only if its "Same files as" and "Depends on" name none of them. Batches that build on each other go to one executor as a chain, each branch cut from the one before.
 - One worktree per lane: `pwsh -File tools/work/new-lane.ps1 -Name <lane> -Branch <id> -From <base>`. It links the shared dependency folders; nobody installs into them.
 - Effort per batch: medium when the spec is precise; high when it starts with a spike, a measurement, a reproduction of a camera/timing/perf bug, or says "design".
