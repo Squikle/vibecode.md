@@ -15,7 +15,7 @@
 
 ## 3. The batch loop
 
-1. **Start:** `git fetch`; <!-- if:team -->your worktree's branch is cut by the coordinator<!-- endif --><!-- if:solo -->merge `origin/main` into `main` if it moved, then `git checkout -b <id>`<!-- endif -->. Read the spec. Write a short plan in `docs/plans/<id>.md` (a task list, 40 to 60 lines) and keep a ledger in `.work/<id>/progress.md`: what is done, what is next, commits, numbers. The ledger is how a fresh session resumes after a cutoff.
+1. **Start:** `git fetch`; <!-- if:team -->your worktree's branch is cut by the coordinator<!-- endif --><!-- if:solo -->merge `origin/main` into `main` if it moved, then `git checkout -b <id>`<!-- endif -->. Read the spec. Write a short plan in `docs/plans/<id>.md` (a task list, 40 to 60 lines) and keep a ledger in `.work/<id>/progress.md`: what is done, what is next, commits, numbers, and **a `NOW:` line** (what you are doing this minute; update it at each step). The ledger is how a fresh session resumes after a cutoff, and how the coordinator tells a silent session from a busy one.
 2. **Build, task by task,** one commit per task. Logic test-first (seen red). Every number a named constant.
 3. **Cheap checks:** types, unit tests, and the API tests if you touched the API.
 4. **Docs:** `docs/ARCHITECTURE.md` (the map), `docs/DECISIONS.md` (a new decision numbered `NEW`; the integrator numbers it), `docs/QUESTIONS.md`, `docs/MEASUREMENTS.md`; `git mv docs/specs/<id>.md docs/specs/done/`. Delete the plan.
@@ -56,7 +56,7 @@ The `bootstrap` batch fills this section with exact commands.
 <!-- endif -->| Doc budgets and start reads | `python -I -X utf8 tools/work/check-docs.py` |
 | The gate on `main` | |
 
-<!-- if:e2e -->**Loading the machines:** each machine runs one locked e2e run at a time, with the test runner's workers set from `docs/MACHINES.md` (about cores minus 2). Builders run only their files; the integrator runs the touched areas. A test stack is shared by all worktrees of a machine: every locked command starts by bringing it up from the caller's tree. Never take a stack down while others may use it.
+<!-- if:e2e -->**Loading the machines:** each machine runs **one browser suite at a time** (a lock per machine), with the test runner's workers set from `docs/MACHINES.md` (about cores minus 2), drawing on the GPU where the machine has one. Builders run only their files; the integrator runs the touched areas. A test stack is shared by all worktrees of a machine: every locked command starts by bringing it up from the caller's tree. Never take a stack down while others may use it.
 <!-- endif -->
 
 ## 5. What to update when a batch is merged
@@ -66,5 +66,5 @@ The backlog row goes; a "Built so far" row and the report's section come in; `NE
 ## 6. Unattended runs, cutoffs and wrap-up
 
 - **Unattended:** never wait for a person. Decide what is cheap to get wrong and record it; skip a part whose guess is costly and note it; skip a batch only when nothing of it can be built.
-- **A usage cutoff or a crash:** a fresh session resumes from `git status` and `.work/<id>/progress.md`; never from memory.
+- **A usage limit, a cutoff or a crash:** when the plan's usage limit stops the sessions, the owner types `continue` after the reset<!-- if:team --> and the coordinator resumes each session<!-- endif -->. A session resumes from its progress file and `git status`, never from memory: check for a half-done edit and a stale lock first.
 - **"Wrap up":** commit the work in progress (`WIP: ...`), write the next steps in the ledger, start nothing new<!-- if:team -->; the coordinator writes `.work/RESUME.md` with every session's head and next step<!-- endif -->.

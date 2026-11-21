@@ -37,7 +37,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 
 ## 3. How to work
 
-- **One batch at a time** per session, by the loop in `docs/HANDOVER.md`. A plan is a short task list; a ledger is a markdown file in `.work/<id>/progress.md`.
+- **One batch at a time** per session, by the loop in `docs/HANDOVER.md`. A plan is a short task list; a ledger is a markdown file in `.work/<id>/progress.md` with a `NOW:` line you keep current. After a usage limit or a crash you resume from it and `git status`, checking for a half-done edit and a stale lock first.
 - **Place every new piece by `docs/ARCHITECTURE.md`** ("Where a new thing goes") and update the map in the same commit. **Reuse before you write:** its "Components to reuse" first; a new shared piece gets its row there.
 - **Tests: few and parameterized.** Logic gets a unit test first, seen red. A bug fix gets a test seen red before the fix. Wiring gets one browser/e2e file per feature. Extend a table before adding a near-duplicate. Never weaken or delete a test to pass.
 - **Size rules:** files at most 400 lines, functions at most 80, enforced by an architecture test whose allow-list may only shrink. Split rather than grow.
@@ -56,7 +56,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Tool calls time out** (about a minute or two): run anything long detached, writing a log, and wait on it in slices. Read logs only through a filter (`Select-String`, `grep`) on failures and the summary.
 - **Shared dependency folders** (a `node_modules` linked into worktrees, a shared venv): never install into them from a worktree. If one looks broken, stop and say so in one line; only the coordinator<!-- if:solo --> (or the builder, in the main tree)<!-- endif --> reinstalls.
 <!-- if:e2e -->- **Heavy tests run through the lock** (`tools/work/lock.ps1` / `lock.sh`): one run per machine at a time, short (only the files you need), always naming the test files.
-<!-- endif -->- **Non-ASCII text never goes through a shell pipe into a file:** use the file tools or a script file. Python run with `-I` ignores `PYTHON*` variables: use `-X utf8`.
+<!-- endif -->- **Non-ASCII text never goes through a shell pipe into a file:** use the file tools or a script file. Never pipe a script into `python -` or `node -` (it can hang on stdin): write the file, then run it. Python run with `-I` ignores `PYTHON*` variables: use `-X utf8`.
 - **Keep each file's line endings;** never rewrite a whole file's endings in a commit. `.gitattributes` pins them (one ending per file type).
 - **Each brief has one tracked copy** in `docs/workflow/`; read it from your own worktree, never the main checkout's. Copies elsewhere go stale.
 - **Never change git config** in a worktree.

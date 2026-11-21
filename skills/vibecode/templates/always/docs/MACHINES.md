@@ -8,6 +8,8 @@
 
 Notes from the setup: {{NOTES}}
 
+**Rules:** one browser suite per machine at a time (its own lock); browser tests draw on the GPU where the machine has one (a red seen only on a GPU is rerun alone in software before it counts, and listed in `docs/QUESTIONS.md`); every machine is kept busy: the coordinator's heartbeat starts a lane on an idle one.
+
 <!-- if:remote -->
 ## The second machine
 

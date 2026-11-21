@@ -48,10 +48,10 @@ You are the CTO of {{PROJECT}}. Read AGENTS.md and docs/workflow/cto.md. Job: <t
 You are the librarian of {{PROJECT}}. Read AGENTS.md and docs/workflow/librarian.md. A pass on <all docs | the docs over budget>. Never touch code; untracked files go to .work/_trash/<date>/, never deleted. Answer in at most 6 lines with KB before and after.
 ```
 
-<!-- if:team -->**Resume after a usage cutoff or a reboot** (coordinator, on `{{M_COORD}}`):
+<!-- if:team -->**Resume after a usage limit, a cutoff or a reboot** (coordinator, on `{{M_COORD}}`; after a usage limit's reset the owner just types `continue` to the running coordinator):
 
 ```text
-You are the coordinator of {{PROJECT}}. Read AGENTS.md, docs/workflow/coordinator.md, then .work/RESUME.md if it exists, else the bottom of .work/coordinator-log.md. Do "Start" (checks), then start FRESH sessions that resume from git status and their ledgers .work/<id>/progress.md.
+You are the coordinator of {{PROJECT}}. Read AGENTS.md, docs/workflow/coordinator.md, then .work/RESUME.md if it exists, else the bottom of .work/coordinator-log.md. Do "Start" (checks), then resume each session with: "resume from your progress file and git status; check for a half-done edit and a stale lock" (a fresh session if its cache is cold).
 ```
 
 **Wrap up** (to the running coordinator): `wrap up` — every session commits its WIP, writes its next steps in its ledger and starts nothing new; the coordinator writes `.work/RESUME.md`.

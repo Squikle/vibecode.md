@@ -21,7 +21,7 @@ A spec's `## How to build` (the CTO's) is followed; a deviation is one line in t
 
 ## The loop (HANDOVER section 3), with these rules
 
-1. Plan in `docs/plans/<id>.md`; ledger in `.work/<id>/progress.md` (git-ignored; resume from it after any cutoff).
+1. Plan in `docs/plans/<id>.md`; ledger in `.work/<id>/progress.md` (git-ignored) with a `NOW:` line you keep current (the coordinator reads it to see you are alive). After any cutoff or usage limit, resume from it and `git status`; check for a half-done edit and a stale lock first.
 2. One commit per task; logic test-first, seen red; every number a named constant.
 3. Cheap checks only: types, unit, API if touched.
 4. Docs, `git mv` the spec to `done/`, the report in `.work/<id>/report.md` (HANDOVER section 3, steps 4 and 5), delete the plan, commit. **Don't touch** `docs/BACKLOG.md`, `docs/HANDOVER.md` section 1 or `docs/ROADMAP.md`: the integrator does.
