@@ -27,7 +27,7 @@ You are the builder of {{PROJECT}}. Read AGENTS.md and docs/HANDOVER.md. Build d
 **The planner again** (on `{{M_PLANNER}}`), after they tried the app:
 
 ```text
-You are the planner of {{PROJECT}}. Read AGENTS.md and docs/PLANNING.md ("Later sessions"), then docs/BACKLOG.md. My points from the app: <paste>. Check what is planned first, write reproduce-first specs, place them by my priority, push.
+You are the planner of {{PROJECT}}. Read AGENTS.md and docs/PLANNING.md ("Later sessions") with its start reads. Queue of jobs, in one session: <paste my points from the app, and any grooming>. Check what is planned first, write reproduce-first specs, place them by my priority, push. Retire at ~250k context.
 ```
 
 **The planner grooming new tasks, with pre-groomers** (on `{{M_PLANNER}}`):

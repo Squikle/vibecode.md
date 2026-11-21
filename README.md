@@ -125,7 +125,7 @@ Every role gets an opencode command in the new project, each setting its own mod
 
 - **Cheapest tool first:** a script or `grep` (free) → a small-model lookup (`/ask`) → a larger model only for judgment.
 - **Doc budgets:** the docs every session reads at its start have a size budget (`AGENTS.md` 10 KB; handover, architecture and planning 30 KB each); the integrator reports sizes after each merge and the librarian compacts what grows.
-- **Held sessions:** the CTO and the librarian are kept per stage and sent each next job instead of being respawned; after a gap they are compacted first (`opencode api post /api/session/<id>/compact --data '{}'`), so the resend is a summary, not the whole history. Reviewers stay fresh for independence.
+- **Role sessions retire, they aren't compacted:** the planner and the CTO take a queue of jobs in one warm session (a cached read costs ~a tenth, so a warm resume beats a fresh start) and retire at ~200-250k context (hard cap 300k); the next one starts from the docs. A small task is queued to a running session or done inline, never a spawn. Reviewers and integrators stay fresh.
 - **T-shaped grooming:** pre-groomers dig with small contexts so the planner's stays wide and short.
 
 ## What `/vibecode` does

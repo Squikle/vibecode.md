@@ -109,8 +109,18 @@ Its prompt: "You are lane <name> of {{PROJECT}} on machine B. Read {{REMOTE_PATH
 
 - **"Wrap up":** tell every session to commit its WIP, write next steps in its ledger and start nothing new; then write `.work/RESUME.md`: per batch its branch, head, state and next step; per machine what runs; "first actions" for the next coordinator.
 - **Cheapest tool first:** a script or `grep` (free) → a small-model helper (a lookup, a summary of a long file or log) → a larger model only for judgment. **Check every machine on every report** with one command; an idle lane is the most expensive state.
-- **Hold role sessions; don't respawn them.** One CTO and one librarian session per stage, each next job sent to the same session id (it keeps what it read); small doc fixes wait for the librarian's next pass. Next job soon (cache warm, ~5 min) and the same docs: resume as is. A longer gap: compact it first (`opencode api post /api/session/<id>/compact --data '{}'`, works on subagent sessions), then resume. A fresh session when the job reads different things. Reviewers stay fresh.
-- **Subagents are opencode sessions already** (resumable, compactable). The built-in `general` subagent cannot start subagents: a planner that starts pre-groomers runs as its own session (`/planner`).
+- **Sessions and context.** Warm = last turn under ~50 minutes ago (the prompt cache lives about an hour). A cached read costs ~0.1x, so resume a warm session over a fresh one, put several jobs in one turn, ask for short answers. Reviewers and integrators stay fresh.
+
+  | The session | Resume it when | Otherwise |
+  |---|---|---|
+  | its state is in files (an executor, a fix round) | warm and at most 125k | a fresh session with a **pointer brief** (worktree, head, where it stopped, what is left; ~20-40k), never a summary of the old chat |
+  | **the planner or the CTO** | under ~150k; from ~150k only jobs that need its loaded context | **it retires at ~200-250k (hard cap 300k)** after committing its queue; the next one starts from the docs. Not compacted: the gaps defeat the big context |
+  | the librarian | warm | a fresh one |
+
+  Over a limit: no new job; act at its next idle point, never mid-run (a merge or a gate in hand).
+- **The planner works in batches:** start it with a queue of planning jobs (a roadmap pass, several groomings); a later job joins the same warm session.
+- **No spawn for a small task:** queue it for the next session of its role or a running one, or look it up yourself with `grep`. Spawn only for a batch, a review, an integration or a queue of jobs. Small doc fixes wait for the librarian's next pass.
+- **Subagents are opencode sessions already** (resumable). The built-in `general` subagent cannot start subagents: a planner that starts pre-groomers runs as its own session (`/planner`).
 - **The owner can start any role** with its command in a new session (`/coordinator`, `/planner`, `/cto`, `/librarian`, `/pregroom`<!-- if:reviewers -->, `/reviewer`<!-- endif -->).
 - **After a cutoff:** sessions are dead. Start fresh ones that resume from `git status` and their ledgers; a stale session id is not reused after a long gap (its cache is gone).
 
