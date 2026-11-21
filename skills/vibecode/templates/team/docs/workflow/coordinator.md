@@ -44,13 +44,13 @@ Then spawn the integrator if something waits for a merge, and the executors from
 
 ## The loop per batch
 
-1. **Spawn the executor** (template below). It builds, runs the cheap checks, and answers `READY FOR REVIEW <id> base=<sha> head=<sha>`<!-- if:!reviewers --> — with no reviewers configured it goes straight on to its gate<!-- endif -->. It goes on with its next batch meanwhile.
+1. **Spawn the executor** (template below). It builds and runs the cheap checks<!-- if:reviewers -->, then answers `READY FOR REVIEW <id> base=<sha> head=<sha>` and goes on with its next batch meanwhile<!-- endif --><!-- if:!reviewers --> and its gate, then answers `DONE <id> head=<sha>`<!-- endif -->.
 <!-- if:reviewers -->2. **Spawn a fresh reviewer** for {{REVIEW_STEP}} (template below; the executor's worktree path in it). **No blocker or major** (`GREEN`, `GREEN WITH NOTES`): the reviewer fixes its own minors and nits there, runs the gate and answers `READY TO MERGE <id> head=<sha>`; the executor, retired at its last READY, is not resumed.
 3. **A real blocker or major** goes back to the executor, who knows the design: resume it (warm, at most 125k) or start a fresh one with a pointer brief, and send the findings with your calls on them. Then a **fresh reviewer for the delta only**, round 2 (`review-2.md`); a rewrite or a change the owner sees always gets it. A trivial major (a one-line test fix) the first reviewer fixes itself. A reviewer's UNVERIFIED claim: the executor measures it first.
-<!-- endif -->4. **The gate and the report:** a reviewed batch's gate is the reviewer's; otherwise the executor's (`docs/workflow/lane-brief.md`), which answers `DONE <id> head=<sha>` with numbers.
-5. **The integrator** (a short-lived one, see below) merges `READY TO MERGE` / `DONE` batches in backlog order; a chain merges as one with all its ids. It pushes, deploys when code changed, and writes the roadmap's "What's new".
-6. **Tell the owner** after each merge: what to try, in a few lines.
-7. **Keep `docs/ROADMAP.md`'s marks true:** 🔨 with who builds it when you start a batch, 🔀 when it is reviewed and gated, ⏸ when it waits for them. Commit these small updates from the main worktree, or hand them to the integrator.
+<!-- endif --><!-- if:reviewers -->4. **The gate and the report:** a reviewed batch's gate is the reviewer's; otherwise the executor's (`docs/workflow/lane-brief.md`), which answers `DONE <id> head=<sha>` with numbers.
+<!-- endif --><!-- if:reviewers -->5<!-- endif --><!-- if:!reviewers -->2<!-- endif -->. **The integrator** (a short-lived one, see below) merges `READY TO MERGE` / `DONE` batches in backlog order; a chain merges as one with all its ids. It pushes, deploys when code changed, and writes the roadmap's "What's new".
+<!-- if:reviewers -->6<!-- endif --><!-- if:!reviewers -->3<!-- endif -->. **Tell the owner** after each merge: what to try, in a few lines.
+<!-- if:reviewers -->7<!-- endif --><!-- if:!reviewers -->4<!-- endif -->. **Keep `docs/ROADMAP.md`'s marks true:** 🔨 with who builds it when you start a batch, 🔀 when it is reviewed and gated, ⏸ when it waits for them. Commit these small updates from the main worktree, or hand them to the integrator.
 
 ## What goes where
 

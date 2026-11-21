@@ -47,19 +47,20 @@ Look up the exact model IDs and variants available to them (opencode: the `model
 
 | Role | Model | Effort | Why |
 |---|---|---|---|
-| Planner | top (the model they like best for design) | high (xhigh for the first plan) | design and order are the expensive mistakes |
+| Planner | top (the model they like best for design) | high (xhigh for the first plan) | design and order are the expensive mistakes; takes a queue of jobs, retires at ~250k context |
 | Pre-groomer (one per heavy task) | top | high | digs into one task with a small, fresh context |
-| CTO (main code lead) | top | high (xhigh for a health sweep) | architecture, how heavy batches are built, refactor rows |
+| CTO (main code lead) | top | high (xhigh for a health sweep) | architecture, how heavy batches are built, refactor rows; retires at ~250k context |
 | Librarian (docs only) | mid | high | contradictions, compaction, doc budgets |
 | Coordinator (entry point) | mid (top over 4 lanes) | medium | routing, slots, status; product calls go to the planner, technical ones to the CTO |
 | Executor, well-defined batch | top | medium | spec says what; tests say done |
 | Executor, design / perf / unclear / camera-like | top | high | needs thinking; set per batch |
-| Reviewer | top | high | must criticise; a weak reviewer waves things through |
-| Integrator | top (mid if merges are routine) | medium | scripted merges, judgement on reds |
+| Reviewer (code) | top | high | must criticise; a weak reviewer waves things through; also fixes its own notes and runs the gate |
+| Reviewer, delta of docs or tools only | mid | high | a small second look at a fix |
+| Integrator | mid | high | scripted merges, judgement on reds; short-lived (~4 merges or 150k), hands conflicts it can't settle to the coordinator |
 | Read helper (large read, small answer) | small | low | saves the caller's context |
 | Builder (solo) | top | high | builds and judges alone |
 
-Write the IDs as `provider/model#variant` (opencode's format for agents, commands and `opencode run -m`). Under a usage cap keep it at most 3 executors and say that every machine shares one cap.
+Write the IDs as `provider/model#variant` (opencode's format for agents, commands and `opencode run -m`). Under a usage cap keep it at most 3 executors and say that every machine shares one cap; after the cap's reset the owner types `continue` and the coordinator resumes each session from its progress file.
 
 ## 6. Deploy
 
@@ -70,7 +71,7 @@ Write the IDs as `provider/model#variant` (opencode's format for agents, command
     "TESTS": "e2e|unit|perf", "USAGE": "cap|tokens|local",
     "LOCAL_MACHINE": "<one line from the probe>", "LOCAL_OS": "windows|macos|linux",
     "REMOTE": false, "REMOTE_HOST": "", "REMOTE_PATH": "", "REMOTE_OS": "", "REMOTE_MACHINE": "",
-    "M_PLANNER": "", "M_COORD": "", "M_EXEC": "", "M_EXEC_HARD": "", "M_REVIEW": "", "M_INTEG": "", "M_HELPER": "", "M_BUILDER": "",
+    "M_PLANNER": "", "M_COORD": "", "M_EXEC": "", "M_EXEC_HARD": "", "M_REVIEW": "", "M_REVIEW_DELTA": "<the mid model>", "M_INTEG": "", "M_HELPER": "", "M_BUILDER": "",
     "M_PREGROOM": "", "M_CTO": "", "M_DOCS": "",
     "NOTES": "<executor count reasoning, missing tools>"}
    ```

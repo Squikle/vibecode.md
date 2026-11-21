@@ -126,11 +126,11 @@ flowchart LR
     <tr><td>CTO</td><td><code>{{M_CTO}}</code></td><td><code>docs/workflow/cto.md</code></td></tr>
     <tr><td>Librarian</td><td><code>{{M_DOCS}}</code></td><td><code>docs/workflow/librarian.md</code></td></tr>
     <tr><td>Executor</td><td><code>{{M_EXEC}}</code>; <code>{{M_EXEC_HARD}}</code> when it needs thinking</td><td><code>docs/workflow/lane-brief.md</code>, its spec</td></tr>
-    <tr><td>Reviewer</td><td><code>{{M_REVIEW}}</code></td><td>its brief, the diff</td></tr>
-    <tr><td>Integrator</td><td><code>{{M_INTEG}}</code></td><td>its brief</td></tr>
+    <tr><td>Reviewer</td><td><code>{{M_REVIEW}}</code></td><td>its brief, the diff (<code>{{M_REVIEW_DELTA}}</code> for a delta review of docs or tools only)</td></tr>
+    <tr><td>Integrator (short-lived)</td><td><code>{{M_INTEG}}</code></td><td>its brief, <code>.work/integrator-queue.md</code>, the batch's report; retires after ~4 merges or 150k</td></tr>
     <tr><td>Read helper, real-agent checks</td><td><code>{{M_HELPER}}</code></td><td>its brief</td></tr>
   </table>
-  <p style="margin-top:12px">Doc budgets (what each session pays at its start): <code>AGENTS.md</code> 10 KB, <code>docs/HANDOVER.md</code>, <code>docs/ARCHITECTURE.md</code> and <code>docs/PLANNING.md</code> 30 KB each (<code>docs/workflow/librarian.md</code>).</p>
+  <p style="margin-top:12px">Doc budgets (what each session pays at its start): <code>AGENTS.md</code> 10 KB, <code>docs/HANDOVER.md</code>, <code>docs/ARCHITECTURE.md</code> and <code>docs/PLANNING.md</code> 30 KB each (<code>docs/workflow/librarian.md</code>). Each role's start reads total at most 60 KB, held by <code>tools/work/check-docs.py</code>. The planner and the CTO retire at ~250k context; the next one starts from the docs.</p>
 </section></main>
 <footer>Prompts: <code>docs/PROMPTS.md</code>. Models are written <code>provider/model#variant</code>.</footer>
 <script type="module">

@@ -105,14 +105,14 @@ flowchart LR
 
 | Role | Does | Model (picked at setup) |
 |---|---|---|
-| **Coordinator** | the owner's entry point: routes what they say, runs the lanes, recommends model and effort, reports status and reminds of blockers | mid model, medium effort |
-| **Planner** | grooms in breadth: vision, specs, order; asks once per pass which tasks get a pre-groomer | top model, high effort |
+| **Coordinator** | the owner's entry point: routes what they say, runs the lanes, keeps every machine busy with a ~10-minute heartbeat, resumes sessions after a usage limit, recommends model and effort, reports status (flags stale built branches) and reminds of blockers | mid model, medium effort |
+| **Planner** | grooms in breadth: vision, specs, order (built work first); asks once per pass which tasks get a pre-groomer; takes a queue of jobs per session | top model, high effort |
 | **Pre-groomer** | one per heavy task (the stem of the T): options, requirements, how it should feel | top, high |
 | **CTO** (main code lead) | architecture; a `How to build` section for heavy specs before they are built; health sweeps that turn smells into refactor rows with criticality (YAGNI, KISS, DRY, SOLID, DDD-lite; errors, logging, security) | top, high (xhigh for a sweep) |
 | **Librarian** | docs only: contradictions, compacted decisions, stale data removed, doc size budgets so every session reads less | mid, high |
 | **Executor** | builds one batch (or a chain) in its own worktree, test-first, by a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition | top, medium (high when it needs thinking) |
-| **Reviewer** | reads the diff against the spec before the slow tests; tags structure problems `[smell]` for the CTO | top, high, fresh per review |
-| **Integrator** | merges reviewed batches, runs the gate, pushes, deploys, writes the roadmap's "What's new" and a doc size line | top, medium |
+| **Reviewer** | reads the diff against the spec before the slow tests; on green fixes its own minors and runs the gate (`READY TO MERGE`); tags blockers and majors by cause and structure problems `[smell]` for the CTO; a delta review of docs or tools only runs on a mid model | top (mid for such a delta), high, fresh per review |
+| **Integrator** | short-lived (~4 merges or 150k context): merges reviewed batches from its brief, a queue file and the report, never the specs; runs the gate, pushes, redeploys after code merges, writes the roadmap's "What's new" and a doc size line | mid, high |
 | **Lookup helper** | `/ask`: finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line` | small, low |
 
 ## Commands
@@ -124,7 +124,7 @@ Every role gets an opencode command in the new project, each setting its own mod
 ## Keeping tokens low
 
 - **Cheapest tool first:** a script or `grep` (free) → a small-model lookup (`/ask`) → a larger model only for judgment.
-- **Doc budgets:** the docs every session reads at its start have a size budget (`AGENTS.md` 10 KB; handover, architecture and planning 30 KB each); the integrator reports sizes after each merge and the librarian compacts what grows.
+- **Doc budgets:** the docs every session reads at its start have a size budget (`AGENTS.md` 10 KB; handover, architecture and planning 30 KB each); each role file names its **start reads** (at most 60 KB in total) and `tools/work/check-docs.py` holds the lists and budgets; the integrator reports sizes after each merge and the librarian compacts what grows.
 - **Role sessions retire, they aren't compacted:** the planner and the CTO take a queue of jobs in one warm session (a cached read costs ~a tenth, so a warm resume beats a fresh start) and retire at ~200-250k context (hard cap 300k); the next one starts from the docs. A small task is queued to a running session or done inline, never a spawn. Reviewers and integrators stay fresh.
 - **T-shaped grooming:** pre-groomers dig with small contexts so the planner's stays wide and short.
 
@@ -135,7 +135,7 @@ Every role gets an opencode command in the new project, each setting its own mod
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, and scripts under `tools/work/` (integration, worktrees, test locks, remote runs). Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, and scripts under `tools/work/` (integration, worktrees, test locks, remote runs, the docs budget check). Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the planner prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the planner session plans the product.
