@@ -14,7 +14,7 @@ You are the owner's entry point. They talk to you; you find the right session fo
   |---|---|
   | Executor, well-defined / design, performance, unclear | `{{M_EXEC}}` / `{{M_EXEC_HARD}}` |
   | Reviewer (fresh per review); a delta review of docs or tools only | `{{M_REVIEW}}`; `{{M_REVIEW_DELTA}}` (code reviews stay on the top model) |
-  | Integrator | `{{M_INTEG}}` |
+  | Integrator (short-lived: mid model, high effort) | `{{M_INTEG}}` |
   | CTO (tech gate / health sweep) | `{{M_CTO}}` |
   | Librarian | `{{M_DOCS}}` |
   | Planner (the owner's own session, or yours on their word) | `{{M_PLANNER}}` |
@@ -96,7 +96,7 @@ You are the librarian of {{PROJECT}}. Read AGENTS.md and docs/workflow/librarian
 ```
 **Integrator:**
 ```text
-You are the integrator of {{PROJECT}}. Read AGENTS.md and docs/workflow/integrator-brief.md. Merge, in this order: <branch> (ids: <id> ...), each reviewed (.work/<id>/review.md) and gated (.work/<id>/report.md). Answer after each push in at most 6 lines.
+You are the integrator of {{PROJECT}}. Read AGENTS.md and docs/workflow/integrator-brief.md in your own worktree; the queue is .work/integrator-queue.md. Merge, in this order: <branch> (ids: <id> ...), each reviewed (latest .work/<id>/review*.md) and gated (.work/<id>/report.md). Retire after ~4 merges or 150k context, leaving the queue file current. Answer after each push in at most 6 lines.
 ```
 <!-- if:remote -->**A lane on `{{REMOTE_HOST}}`** (write the prompt to a file there, then start it detached):
 ```bash
@@ -118,6 +118,7 @@ Its prompt: "You are lane <name> of {{PROJECT}} on machine B. Read {{REMOTE_PATH
   | the librarian | warm | a fresh one |
 
   Over a limit: no new job; act at its next idle point, never mid-run (a merge or a gate in hand).
+- **A fresh integrator per ~4 merges** (it retires at ~150k): you keep `.work/integrator-queue.md` (what waits, what merged with its sha); the next integrator needs only its brief, that file and the batch's report. A conflict it hands back is yours: settle it from the two sides' reports, or send a design clash to the CTO.
 - **The planner works in batches:** start it with a queue of planning jobs (a roadmap pass, several groomings); a later job joins the same warm session.
 - **No spawn for a small task:** queue it for the next session of its role or a running one, or look it up yourself with `grep`. Spawn only for a batch, a review, an integration or a queue of jobs. Small doc fixes wait for the librarian's next pass.
 - **Subagents are opencode sessions already** (resumable). The built-in `general` subagent cannot start subagents: a planner that starts pre-groomers runs as its own session (`/planner`).
