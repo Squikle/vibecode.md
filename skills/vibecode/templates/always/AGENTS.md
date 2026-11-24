@@ -63,6 +63,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Keep each file's line endings;** never rewrite a whole file's endings in a commit. `.gitattributes` pins them (one ending per file type).
 - **Each brief has one tracked copy** in `docs/workflow/`; read it from your own worktree, never the main checkout's. Copies elsewhere go stale.
 - **Never change git config** in a worktree.
+- **A script that touches live state** (starts or stops the app, deploys, merges, ships) **refuses an unknown argument** (exit 2), never ignores or guesses it: a stray one once took the running app down.
 - **`.work/` is git-ignored run state.** Reviews, reports, locks and shared logs live in the **main checkout's** `.work/` (the folder holding `.git`); a worktree's own `.work/` holds only its ledgers (`.work/<id>/progress.md`).
 
 ## 6. Where things are

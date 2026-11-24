@@ -137,7 +137,7 @@ Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](O
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, and scripts under `tools/work/` (integration, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit). Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate under `tools/ci/` and the docs vault under `tools/vault/`. Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the planner prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the planner session plans the product.
@@ -152,6 +152,11 @@ cp commands/vibecode.md ~/.config/opencode/commands/
 ```
 
 Claude Code users may put the skill in `~/.claude/skills/` instead.
+
+**Optional, for your own OpenCode** (not per project): `python -I -X utf8 skills/vibecode/scripts/deploy.py --global`
+installs the prompt-polish plugin and the ctxpick TUI plugin into your OpenCode config folder where missing, then prints
+the `cli.json` line and a compaction config snippet to merge by hand. It never edits your configs. Details:
+`skills/vibecode/templates/opencode-global/README.md`.
 
 ## Usage
 
@@ -177,6 +182,6 @@ The interview answers decide which template sets are deployed:
 ```
 skills/vibecode/SKILL.md          the skill
 skills/vibecode/scripts/deploy.py copies and fills the templates
-skills/vibecode/templates/        always/ team/ solo/ reviewers/ e2e/ remote/
+skills/vibecode/templates/        always/ team/ solo/ reviewers/ e2e/ remote/ (opencode-global/: opt-in, deploy.py --global)
 commands/vibecode.md              the /vibecode command
 ```
