@@ -8,8 +8,9 @@ Usage: python -I -X utf8 tools/work/session-audit.py [--peek] <name>=<session id
 
 ctxSum is the real prompt size summed over every turn (input + cache read + cache write), from the provider's counts.
 reRead is an estimate: a tool output's chars/4, times the turns after it (each later turn re-sends it; compaction is
-ignored, so it is an upper bound). waits counts shell calls that sleep or wait on a process: each such turn re-sends
-the whole context to learn nothing. It prints to stdout and writes nothing.
+ignored, so it is an upper bound). waits counts shell calls that sleep between checks: each such turn re-sends the
+whole context to learn nothing (one blocking wait on a launched run is not counted). Check a smell against the export
+before fixing it: a count alone can be a false alarm. It prints to stdout and writes nothing.
 """
 import collections, json, pathlib, re, shutil, subprocess, sys, time
 
@@ -18,8 +19,10 @@ KINDS = [("wait/poll", r"wait-process|start-sleep|get-process|\bsleep \d|\bwait 
          ("build", r"\bnpm |\bpnpm |\byarn |\btsc\b|cargo build|\bmake\b"), ("docker", r"docker"), ("ssh", r"\bssh\b"),
          ("log-read", r"\.log\b|get-content.*-tail|\btail\b"), ("git", r"\bgit\b"),
          ("grep", r"select-string|\brg\b|\bgrep\b"), ("read", r"get-content|\bcat\b|\bhead\b")]
-WAIT = re.compile(r"wait-process|start-sleep|\bsleep \d|\bwait \$")
-BIG_CHARS, SAME_CMD, GREP_CALLS, LAST_CTX, AVG_CTX, POLLS = 15000, 3, 20, 150000, 120000, 3
+# Polling = sleeping between checks. One blocking `Wait-Process`/`wait $pid` per launched run is not polling.
+WAIT = re.compile(r"start-sleep|\bsleep \d")
+# Greps: a smell only above ~1 per 3 turns; a bug hunt's targeted greps are normal (two audits: 55 and 58).
+BIG_CHARS, SAME_CMD, GREP_PER_TURN, LAST_CTX, AVG_CTX, POLLS = 15000, 3, 0.34, 150000, 120000, 3
 
 
 def kind(tool, inp):
@@ -75,7 +78,7 @@ def audit(name, o):
         print(f"   big {w/1e6:4.2f}M {l/1e3:5.1f}k {k}: {h}")
     sm = [f"polling x{waits}"] if waits >= POLLS else []
     greps = calls["grep"] + calls["sh:grep"]
-    sm += [f"grep x{greps}"] if greps >= GREP_CALLS else []
+    sm += [f"grep x{greps} ({greps / n:.2f}/turn)"] if n and greps / n > GREP_PER_TURN else []
     sm += [f"big {l/1e3:.0f}k {k}: {h[:50]}" for w, l, k, h in big if l >= BIG_CHARS][:4]
     sm += [f"same cmd x{c}: {x[:50]}" for x, c in collections.Counter(x.strip() for x in cmds if x.strip()).items()
            if c >= SAME_CMD][:3]
