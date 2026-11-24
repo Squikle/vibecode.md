@@ -9,7 +9,8 @@ Usage: python -I -X utf8 tools/work/session-audit.py [--peek] <name>=<session id
 ctxSum is the real prompt size summed over every turn (input + cache read + cache write), from the provider's counts.
 reRead is an estimate: a tool output's chars/4, times the turns after it (each later turn re-sends it; compaction is
 ignored, so it is an upper bound). waits counts shell calls that sleep between checks: each such turn re-sends the
-whole context to learn nothing (one blocking wait on a launched run is not counted). Check a smell against the export
+whole context to learn nothing (one blocking wait on a launched run is not counted). mapPy counts `map.py` lookups;
+greps count `git grep` too. A review pack (`pack*.md`) is read whole on purpose: never a "big" line. Check a smell against the export
 before fixing it: a count alone can be a false alarm. It prints to stdout and writes nothing.
 """
 import collections, json, pathlib, re, shutil, subprocess, sys, time
@@ -22,7 +23,13 @@ KINDS = [("wait/poll", r"wait-process|start-sleep|get-process|\bsleep \d|\bwait 
 # Polling = sleeping between checks. One blocking `Wait-Process`/`wait $pid` per launched run is not polling.
 WAIT = re.compile(r"start-sleep|\bsleep \d")
 # Greps: a smell only above ~1 per 3 turns; a bug hunt's targeted greps are normal (two audits: 55 and 58).
-BIG_CHARS, SAME_CMD, GREP_PER_TURN, LAST_CTX, AVG_CTX, POLLS = 15000, 3, 0.34, 150000, 120000, 3
+BIG_CHARS, SAME_CMD, GREP_PER_TURN, LAST_CTX, AVG_CTX, POLLS, WIDE_GREPS = 15000, 3, 0.34, 150000, 120000, 3, 3
+GIT_GREP = re.compile(r"\bgit\b[^|;]*\bgrep\b")
+# A grep that prints a whole definition (-A20 and up) where `tools/work/map.py` gives its line numbers.
+WIDE_GREP = re.compile(r"\bgrep\b[^|;]*-a\s*[2-9]\d|select-string[^|;]*-context\s+\d+\s*,\s*[2-9]\d")  # lowercased
+# A review pack (`.work/<id>/pack*.md`) is meant to be read whole, once (reviewer-brief): it still counts in the
+# totals, but is never a "big read".
+PACK = re.compile(r"(^|[\\/\s])pack[^\\/\s]*\.md\b", re.I)
 
 
 def kind(tool, inp):
@@ -66,19 +73,24 @@ def audit(name, o):
             w = len(txt) / 4 * (n - i)
             calls[k] += 1; chars[k] += len(txt); weight[k] += w
             head = (inp.get("command") or inp.get("path") or inp.get("filePath") or inp.get("pattern") or json.dumps(inp))
-            big.append((w, len(txt), k, head[:90].replace("\n", " ")))
+            if not (k in ("read", "sh:read") and PACK.search(head)):
+                big.append((w, len(txt), k, head[:90].replace("\n", " ")))
             cmds.append(inp.get("command") or "")
-    waits = sum(bool(WAIT.search(x.lower())) for x in cmds)
+    low = [x.lower() for x in cmds]
+    waits = sum(bool(WAIT.search(x)) for x in low)
+    maps = sum("map.py" in x for x in low)
     print(f"\n== {name} turns={n} ctxSum={tot/1e6:.2f}M out={out/1e3:.0f}k firstCtx={first/1e3:.0f}k "
-          f"lastCtx={last/1e3:.0f}k waits={waits}")
+          f"lastCtx={last/1e3:.0f}k waits={waits} mapPy={maps}")
     for k, v in weight.most_common(9):
         print(f"  {k:12} calls={calls[k]:4} outChars={chars[k]/1e3:7.1f}k reRead~{v/1e6:5.2f}M")
     big.sort(reverse=True)
     for w, l, k, h in big[:5]:
         print(f"   big {w/1e6:4.2f}M {l/1e3:5.1f}k {k}: {h}")
     sm = [f"polling x{waits}"] if waits >= POLLS else []
-    greps = calls["grep"] + calls["sh:grep"]
+    greps = calls["grep"] + calls["sh:grep"] + sum(bool(GIT_GREP.search(x)) for x in low)
+    wide = sum(bool(WIDE_GREP.search(x)) for x in low)
     sm += [f"grep x{greps} ({greps / n:.2f}/turn)"] if n and greps / n > GREP_PER_TURN else []
+    sm += [f"grep -A20+ x{wide} (map.py?)"] if wide >= WIDE_GREPS else []
     sm += [f"big {l/1e3:.0f}k {k}: {h[:50]}" for w, l, k, h in big if l >= BIG_CHARS][:4]
     sm += [f"same cmd x{c}: {x[:50]}" for x, c in collections.Counter(x.strip() for x in cmds if x.strip()).items()
            if c >= SAME_CMD][:3]
@@ -109,7 +121,7 @@ def peek(name, o):
 def main(args):
     quick = args[:1] == ["--peek"]
     args = args[1:] if quick else args
-    if not args or any("=" not in a for a in args):
+    if not args or any("=" not in a or a.startswith("-") for a in args):
         print("usage: session-audit.py [--peek] <name>=<session id or export .json> ...", file=sys.stderr)
         return 2
     turns = total = polls = 0
