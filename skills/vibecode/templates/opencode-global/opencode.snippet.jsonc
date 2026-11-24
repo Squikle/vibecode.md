@@ -1,0 +1,29 @@
+// Parts to merge into YOUR global opencode.jsonc by hand: deploy.py --global prints this file and never edits your
+// config. Replace <provider> with your cloud provider's id and each M_* with the model ids your answers file names
+// (M_EXEC, M_REVIEW, M_INTEG, ...). OpenCode reloads its config on save.
+{
+  // Auto-compaction. buffer "30%": it compacts at 70% of the model's limit.input (a fixed buffer such as 24000 left
+  // ~8.7k usable on a 32k model and compacted in a loop). keep.tokens 4000: OpenCode estimates chars/4 but the cut
+  // snaps back to the last user message, so the real kept tail runs ~2-3x keep (6000 measured as 12.9k-18.3k);
+  // 4000 still keeps the current user turn whole and the 6+ latest steps.
+  "compaction": { "auto": true, "buffer": "30%", "keep": { "tokens": 4000 } },
+
+  "provider": {
+    "<provider>": {
+      "models": {
+        // limit.input is what the compaction trigger uses: input - 30% = where it compacts. Per model, so local
+        // models' math is untouched. With a 1M window and no limit.input, it compacted at 700k.
+        "M_EXEC": { "limit": { "context": 1000000, "input": 171500 } },     // ~120k: long builder and coordinator chats
+        "M_INTEG": { "limit": { "context": 1000000, "input": 100000 } },    // ~70k: short sessions on a cheaper model
+        // The planner rereads its start docs (~23k tokens) after each compaction: at ~70k it compacted in a loop.
+        // Keep it at ~150k or more.
+        "M_PLANNER": { "limit": { "context": 1000000, "input": 214286 } },  // ~150k
+
+        // Lane aliases: the same model under its own name, so a lane gets its own limit (variants are inherited).
+        // Spawn lanes as <provider>/M_EXEC-lane#<variant>.
+        "M_EXEC-lane": { "modelID": "M_EXEC", "limit": { "context": 1000000, "input": 171500 } },
+        "M_REVIEW-lane": { "modelID": "M_REVIEW", "limit": { "context": 1000000, "input": 171500 } }
+      }
+    }
+  }
+}

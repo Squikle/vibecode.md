@@ -1,0 +1,20 @@
+{
+  "name": "ctxpick",
+  "version": "0.1.0",
+  "description": "Keep/drop picker for a compacted OpenCode session's context: summary sections, kept tail and big outputs, with token estimates.",
+  "license": "MIT",
+  "author": "Michael Dovhalov",
+  "type": "module",
+  "keywords": ["opencode", "opencode-plugin", "compaction", "context"],
+  "exports": {
+    "./tui": "./tui.ts",
+    "./core": "./src/core.ts"
+  },
+  "bin": {
+    "ctxpick": "bin/ctxpick.ts"
+  },
+  "engines": {
+    "node": ">=23.6"
+  },
+  "files": ["tui.ts", "src", "bin", "README.md", "LICENSE"]
+}

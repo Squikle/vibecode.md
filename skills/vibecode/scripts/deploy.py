@@ -8,10 +8,59 @@ Usage: python -I -X utf8 deploy.py <target> <answers.json>
 - Keeps <!-- if:flag --> ... <!-- endif --> blocks only when the flag is on; `if:!flag` negates; blocks may nest.
 - Never overwrites a file; templates named `gitignore` / `gitattributes` are appended to the dotfiles line by line.
 - Prints what it created and skipped, then docs/PROMPTS.md's "Start here" part.
+- templates/opencode-global is never copied into a project.
+
+Usage: python -I -X utf8 deploy.py --global [--force]
+- Copies templates/opencode-global's plugins/* and tui-plugins/* into your OpenCode config folder
+  ($XDG_CONFIG_HOME/opencode, else ~/.config/opencode) only where missing (--force: overwrite the kit's own files).
+- Never edits opencode.jsonc or cli.json: prints the cli.json lines and the config snippet instead.
 """
-import json, pathlib, re, sys
+import json, os, pathlib, re, shutil, sys
 
 base = pathlib.Path(__file__).resolve().parent.parent / "templates"
+
+
+def install_global(args: list) -> int:
+    if any(x != "--force" for x in args) or len(args) > 1:
+        print("usage: deploy.py --global [--force]", file=sys.stderr)
+        return 2
+    force, kit = bool(args), base / "opencode-global"
+    home = pathlib.Path(os.environ.get("XDG_CONFIG_HOME") or pathlib.Path.home() / ".config") / "opencode"
+    done, kept, tui = [], [], []
+    for sub in ("plugins", "tui-plugins"):
+        for src in sorted((kit / sub).iterdir()) if (kit / sub).is_dir() else []:
+            dst = home / sub / src.name
+            if sub == "tui-plugins":
+                tui.append(dst.as_posix())
+            if dst.exists() and not force:
+                kept.append(f"{sub}/{src.name}")
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            if src.is_dir():
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+            else:
+                shutil.copy2(src, dst)
+            done.append(f"{sub}/{src.name}")
+    print(f"OpenCode config folder: {home}")
+    print(f"copied {len(done)}: {', '.join(done) or '-'}")
+    if kept:
+        print(f"kept (already there; --force overwrites) {len(kept)}: {', '.join(kept)}")
+    if tui:
+        print("\nTUI plugins: add to \"plugins\" in " + (home / "cli.json").as_posix() + " (deploy never edits it):")
+        print("  \"plugins\": [" + ", ".join(json.dumps(t) for t in tui) + "]")
+        print("then restart the TUI. ctxpick's CLI (bin/) needs node >= 23.6.")
+    print("\nprompt-polish: set POLISH_MODEL and ONLY_PROVIDERS at the top of plugins/prompt-polish/index.js.")
+    print("rtk (not vendored): install rtk, then `rtk init -g --opencode`.")
+    print("\nMerge by hand into " + (home / "opencode.jsonc").as_posix() + " (deploy never edits it):\n")
+    print((kit / "opencode.snippet.jsonc").read_text(encoding="utf-8"))
+    return 0
+
+
+if sys.argv[1:2] == ["--global"]:
+    sys.exit(install_global(sys.argv[2:]))
+if len(sys.argv) != 3 or sys.argv[1].startswith("-"):
+    print("usage: deploy.py <target> <answers.json> | deploy.py --global [--force]", file=sys.stderr)
+    sys.exit(2)
 target = pathlib.Path(sys.argv[1]).resolve()
 a = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
 
