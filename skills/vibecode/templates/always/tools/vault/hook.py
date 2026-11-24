@@ -9,6 +9,7 @@ so `core.hooksPath` is honoured. post-merge fires on a merge, a `pull`, a `merge
 by `git commit` after a conflict and on the merge-log commit. Each acts only when the worktree's branch is `main`, and runs
 the tree's own `tools/vault/hook.py run`: `vaultify --rev HEAD --if-changed` (the commit that just landed), one line per run
 in `<vault>/../vault-hook.log` (a miss's details indented under it), one line on git's stderr only on a miss or an error, exit 0 always.
+Then the app follows: `tools/ci/autodeploy.py kick` (a detached redeploy, opt-in per machine; see that file).
 A hook that is not ours is moved to `<name>.vault-chained` and run first, with git's arguments; its exit code is kept.
 When that slot is taken the install refuses and changes nothing. `remove` deletes ours and puts the chained one back.
 Default vault: `<main tree>/.work/vault` (the parent of the git common dir). `print` shows the plan and writes nothing.
@@ -165,7 +166,24 @@ def run(a):
         say = (say or "vault: ok") + f" (no log: {e})"
     if say:
         print(say, file=sys.stderr)
+    deploy()
     return 0
+
+
+def deploy():
+    """The app follows main: the tree's own `tools/ci/autodeploy.py` kick (opt-in per machine there; it returns at
+    once). A tree without it does nothing; an error is one stderr line, never a failed git."""
+    t = HERE.parent / "ci" / "autodeploy.py"
+    if not t.is_file():
+        return
+    try:
+        if str(t.parent) not in sys.path:
+            sys.path.insert(0, str(t.parent))
+        import autodeploy
+        autodeploy.kick()
+    except BaseException as e:                              # SystemExit included: a hook never fails git
+        if not isinstance(e, KeyboardInterrupt):
+            print(f"deploy: error {type(e).__name__}: {str(e)[:120]}", file=sys.stderr)
 
 
 def main(argv=None):

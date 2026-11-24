@@ -48,7 +48,7 @@ The `bootstrap` batch fills each `cmd`. A part:
 Top level: `base`, `lock_minutes` (50), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
 diff that redeploys nothing), `ship.deploy` (the command that redeploys the owner's app), `ship.health` (a URL that
 must answer 200 after it). This machine's overrides go in `.work/ci/machine.json` (git-ignored, merged over `ci.json`):
-`name`, `busy`, `remote`, `ship`, `timeouts` per part.
+`name`, `busy`, `remote`, `ship`, `autodeploy` (below), `timeouts` per part.
 
 Most runners write JUnit with one flag: pytest `--junitxml`, vitest/jest/Playwright a `junit` reporter, `go test` via
 `go-junit-report`, cargo-nextest `--profile ci`. Write it under `.work/junit/` so it never lands in git.
@@ -62,6 +62,19 @@ Most runners write JUnit with one flag: pytest `--junitxml`, vitest/jest/Playwri
   `tools/vault/` exists), the deploy (not for a docs-only diff) and its health check, the remote's fast-forward.
 - One line: `SHIP <sha8> OK pushed=.. deploy=yes|no vault=w/m remote=ok|skip [new-flaky=..]` or
   `SHIP <sha8> FAIL <step>: <reason>`. A FAIL leaves the steps after it to do by hand, in that order.
+
+## Autodeploy: the app follows main (opt-in per machine)
+
+`"autodeploy": true` in `.work/ci/machine.json` (with `ship.deploy` set): every merge or commit on `main` redeploys the
+owner's app by itself, so a merge nobody ships by hand is still running a minute later.
+- The vault hook (`tools/vault/hook.py install`) calls `python -I tools/ci/autodeploy.py kick` on main: it marks the move,
+  starts a detached runner and returns at once. One deploy at a time; a move during a deploy is picked up after it.
+- Skipped: HEAD already deployed, or every file since the last good deploy matches `autodeploy_idle` (default:
+  `docs_only` plus `tests/*`, `test/*`, `tools/ci/*`, `tools/work/*`, `tools/vault/*`; set your own list in `ci.json`).
+- `ship` then waits for that runner instead of building a second time; its FAIL is the ship's `FAIL deploy`.
+- `python -I tools/ci/autodeploy.py status`: one line (`deploy ok|skip|FAIL <sha8> <hh:mm> <s>s ..`, `| running`),
+  exit 1 on FAIL. State and log: `.work/deploy/` in the main checkout. `run` deploys now, in the foreground.
+- Off (the default): `kick` prints `deploy: off on this machine` and does nothing.
 
 ## Known reds
 

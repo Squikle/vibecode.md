@@ -3,7 +3,7 @@
 
 One call instead of five: the pacer's usage line (`pacer.py status --json` from the opt-in kit, skipped when missing), the latest
 gate verdict per sha (`.work/ci/<sha8>.json` and `.only.json`, and a run folder with no verdict yet), the machine
-locks (`.work/<name>.lock` or `.lock.d`: holder and age), the coordinator's child sessions with how long each has
+locks (`.work/<name>.lock` or `.lock.d`: holder and age; a running or failed autodeploy too), the coordinator's child sessions with how long each has
 been quiet (the opencode database read-only for the children; with no database, `opencode session list --format
 json` for the top level), and the head of `.work/integrator-queue.md`.
 
@@ -113,9 +113,9 @@ def locks(work: Path, now_ms: float) -> list[str]:
     """Each machine lock: `<name>.lock` (a file, lock.ps1) or `<name>.lock.d` (a folder with `who`, lock.sh)."""
     found = sorted(p for p in work.glob("*.lock*") if re.fullmatch(r"[\w.-]+\.lock(\.d)?", p.name)) \
         if work.is_dir() else []
-    if not found:
+    parts = deploy(work / "deploy", now_ms)
+    if not found and not parts:
         return ["locks: none held"]
-    parts = []
     for p in found:
         src = p / "who" if p.is_dir() else p
         try:
@@ -124,6 +124,21 @@ def locks(work: Path, now_ms: float) -> list[str]:
             text = []
         parts.append(f"{p.name} {text[0] if text else '?'} {ago(p.stat().st_mtime * 1000, now_ms)}")
     return ["locks: " + " | ".join(parts)]
+
+
+def deploy(d: Path, now_ms: float) -> list[str]:
+    """Autodeploy (`tools/ci/autodeploy.py`, opt-in): a running deploy and a failed last one; nothing when quiet."""
+    out = []
+    if (d / "run.lock").is_file():
+        out.append(f"deploy running {ago((d / 'run.lock').stat().st_mtime * 1000, now_ms)}")
+    try:
+        s = json.loads((d / "state.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        s = {}
+    if s.get("word") == "FAIL":
+        out.append(f"deploy FAIL {str(s.get('head', '?'))[:8]} at {str(s.get('at', '?'))[11:16]} "
+                   f"(tools/ci/autodeploy.py status)")
+    return out
 
 
 def top_sessions() -> list[dict]:
@@ -229,6 +244,9 @@ def selftest() -> int:
         (work / "e2e.lock").write_text("RV16 2026-11-24T12:19:22-05:00", encoding="utf-8")
         (work / "perf.lock.d").mkdir()
         (work / "perf.lock.d" / "who").write_text("LANE2 2026-11-24", encoding="utf-8")
+        (work / "deploy").mkdir()
+        (work / "deploy" / "state.json").write_text('{"word": "FAIL", "head": "cafef00d99", "at": "2026-11-24 13:05:00"}',
+                                                    encoding="utf-8")
         (work / "integrator-queue.md").write_text("# q\n\nrules\n\n## Next job\n\nmerge x\n\n## Last job\n\nINT9 ok\n",
                                                  encoding="utf-8")
         db = Path(tmp) / "oc.db"
@@ -259,6 +277,7 @@ def selftest() -> int:
             "a new red named": "00000000 NEW-RED" in flat and "a.spec.ts" in flat,
             "full verdict over --only": "00000001 GREEN" in flat and "--only" not in flat,
             "locks": "e2e.lock RV16" in flat and "perf.lock.d LANE2" in flat,
+            "deploy FAIL in locks": "deploy FAIL cafef00d at 13:05" in flat,
             "busy child": "BUSY" in flat and "LANE1 build" in flat,
             "idle child with outcome": "succeeded" in flat and "RV1 review" in flat,
             "old child dropped": "OLD" not in flat,

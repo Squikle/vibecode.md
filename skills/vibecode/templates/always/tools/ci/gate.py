@@ -571,7 +571,14 @@ def ship(sha: str, a, config: dict) -> str:
             except (IndexError, ValueError, KeyError):
                 vault = "dry" if a.dry_run else "?"
         deployed = "no"
-        if code and cfg.get("deploy"):
+        if code and cfg.get("deploy") and config.get("autodeploy") and not a.dry_run:
+            import autodeploy                                # the app follows main: its runner and lock, no 2nd build
+            steps.append("deploy")
+            autodeploy.mark(config)
+            if autodeploy.run(config, tree, wait=True):
+                raise ShipError("deploy", (autodeploy.read_state(config).get("tail") or ["autodeploy: FAIL"])[-1])
+            deployed = "yes"
+        elif code and cfg.get("deploy"):
             step("deploy", cfg["deploy"], shell=True)
             deployed = "yes"
             if cfg.get("health") and not a.dry_run:
