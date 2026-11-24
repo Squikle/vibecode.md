@@ -43,6 +43,8 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Size rules:** files at most 400 lines, functions at most 80, enforced by an architecture test whose allow-list may only shrink. Split rather than grow.
 - **Every tunable number is a named constant** in the one place `ARCHITECTURE.md` names.
 - **Match the code around you:** names, structure, comment density. A comment only for what the code cannot say.
+- **Lookups: exact tools first.** `git grep -n "<name>"` for callers and a rename's sites. Before reading a file over ~300 lines: `python -I -X utf8 tools/work/map.py <file>` (its outline with line numbers; a folder: one line per file), then the range you need. **A file over ~15 KB is read whole at most once;** after that grep, then offset/limit. No code-index server needed (measured: grep was as small or smaller and found what one missed).
+- **Hand a read to a helper** only when the reading is large (300+ lines, many files, web pages), the answer small (~20 lines) and you won't need the text after. Read it yourself when you will edit or quote it, the answer must be exact, or the read is small.
 - **Stuck after two failed tries:** stop retrying; search how others solved it (the library's docs and issues), then say what you found and used.
 - **Product limits** live in `docs/VISION.md` ("Limits"). Every batch respects them.
 
@@ -57,6 +59,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Shared dependency folders** (a `node_modules` linked into worktrees, a shared venv): never install into them from a worktree. If one looks broken, stop and say so in one line; only the coordinator<!-- if:solo --> (or the builder, in the main tree)<!-- endif --> reinstalls.
 <!-- if:e2e -->- **Heavy tests run through the lock** (`tools/work/lock.ps1` / `lock.sh`): one run per machine at a time, short (only the files you need), always naming the test files.
 <!-- endif -->- **Non-ASCII text never goes through a shell pipe into a file:** use the file tools or a script file. Never pipe a script into `python -` or `node -` (it can hang on stdin): write the file, then run it. Python run with `-I` ignores `PYTHON*` variables: use `-X utf8`.
+- **With `rtk` on PATH,** prefix `git log` and `git status` (`rtk git status`; measured ~58% and ~46% less output). Not for `git diff`/`show`/`--stat`, scripts or pipes (~0-8%). Without it, the plain command.
 - **Keep each file's line endings;** never rewrite a whole file's endings in a commit. `.gitattributes` pins them (one ending per file type).
 - **Each brief has one tracked copy** in `docs/workflow/`; read it from your own worktree, never the main checkout's. Copies elsewhere go stale.
 - **Never change git config** in a worktree.

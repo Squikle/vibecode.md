@@ -32,7 +32,7 @@ In every clean stage after the CTO's sweep; when a doc passes its budget (sectio
 | each role brief in `docs/workflow/` | 12 KB |
 | `docs/QUESTIONS.md`, `docs/DECISIONS.md` (searched, not read whole) | 50 KB |
 
-Over budget: cut by the steps above, never by dropping a rule; if a rule must go, name it and let the planner or the CTO choose.
+Over budget: cut by the steps above, never by dropping a rule; if a rule must go, name it and let the planner or the CTO choose. **A part only some jobs need** (browser runs, machines, a rare event) moves to its own file, named under the role's `**For the job:**` and read only then; check that every backticked name of the old text is still in one of the two files. **A run-state file read at each start** (a queue, a log) keeps only what is live: a finished job is one line, old lines move to an archive nobody reads.
 
 ## 4. Commits and answer
 
