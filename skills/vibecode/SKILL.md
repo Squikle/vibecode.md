@@ -62,6 +62,11 @@ Look up the exact model IDs and variants available to them (opencode: the `model
 
 Write the IDs as `provider/model#variant` (opencode's format for agents, commands and `opencode run -m`). Under a usage cap keep it at most 3 executors and say that every machine shares one cap; after the cap's reset the owner types `continue` and the coordinator resumes each session from its progress file.
 
+**Compaction (advise it in your answer; never edit their opencode config unasked).** Role sessions retire instead of compacting, but a long lane compacts, and early is cheaper:
+- **A lane-only alias per model** in the provider's `models`: `"<model>-lane": { "modelID": "<model>", "limit": { "context": <its window>, "input": 171500 } }`. Auto-compaction fires at `input` minus `compaction.buffer`, so with `"buffer": "30%"` that is ~120k. The coordinator spawns executors, reviewers and integrators on `<provider>/<model>-lane#<variant>`; the owner's own sessions keep the plain model.
+- **`"compaction": { "auto": true, "buffer": "30%", "keep": { "tokens": 4000 } }`.** opencode counts the kept tail at chars/4, Claude's tokenizer runs ~2.4 chars/token and the cut snaps back to the last user message: `keep` 6000 kept 13-18k real tokens; 4000 keeps ~7k.
+- Measured by replaying one long coordinator session: auto-compaction at ~70k with `keep` 4000 cut its lifetime cache reads by 38% against compacting by hand at ~120k. The vibecode repo's `OPTIMIZATIONS.md` has the numbers.
+
 ## 6. Deploy
 
 1. Write the answers to `.work/vibecode-answers.json` in the target (create `.work/`):
@@ -83,5 +88,6 @@ Write the IDs as `provider/model#variant` (opencode's format for agents, command
 - **TL;DR** (2 lines): what was set up, the next step.
 - A table of the sessions: role, model#effort, when it starts.
 - **The planner prompt** in a code block: the one thing to paste now, into a new opencode session on the planner's model. Then the coordinator prompt (or, for solo, the builder prompt), to paste after the planner says the first batches are ready. Both are printed by `deploy.py` and kept in `docs/PROMPTS.md`.
+- The compaction advice (section 5) in 2-3 lines, with the alias names for their models.
 - Missing tools from the probe, and anything not verified, as ⚠️ lines.
 - Nothing else: no tour of the files.
