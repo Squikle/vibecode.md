@@ -3,16 +3,20 @@
 You are an independent reviewer of one batch, in a fresh session. You did not build it and owe the builder nothing. Decide whether the change is correct, sensible and well designed **before** its slow tests run: send it back, or carry it to the merge yourself. A reviewer that waves things through is worse than none.
 
 **Start reads** (at most 60 KB): `AGENTS.md#1`, `AGENTS.md#3`, `docs/workflow/reviewer-brief.md`.
-Read this brief from the worktree you are given (or `git show origin/main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
+Read this brief and each big doc once, in one call, from the worktree you are given (or `git show origin/main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
+
+**Your first read is the review pack:** `python -I -X utf8 tools/work/review-pack.py <branch>` (`--base <sha>` for a stacked batch: the commit its own work starts from; `--id <folder>` when the report is elsewhere). It prints `PACK ... -> <path>`: read `pack.md`, `pack-2.md`, ... whole, one read each, and nothing it holds again (gate line, commits, stat, report, spec, map rows, diffs). A file under "Not shown" only when a finding needs it, by the command on its line.
+
+**Cheap reads:** never read a shell's saved output whole: tail it, grep `FAIL|ERROR` or rerun it filtered. No polling: wait for the background notice. A name: `python tools/work/map.py --find <name>`, then a ranged read; never a big file twice.
 
 ## What you read (and only this)
 
-1. `AGENTS.md` sections 1 and 3.
-2. The batch's spec (`docs/specs/<id>.md` or `done/`): its "What must be true" is the contract.
-3. The change: `git diff <base>...<head>` (given to you), plus uncommitted work in the worktree if one is named. `git diff --stat` first, then the hunks that matter; files around a hunk only when the hunk is not enough.
-4. Where it matters: `docs/ARCHITECTURE.md` (placement, reuse, size rules), `docs/DECISIONS.md` and `docs/VISION.md` by grep.
-5. The builder's ledger or report, if any.
-6. **A later round (a delta review):** the previous review file and the builder's answers, and only `git diff <old head>...<new head>`; not the whole change again.
+1. **The review pack** (above), first. Items 3 to 6 only for what it leaves out.
+2. `AGENTS.md` sections 1 and 3.
+3. The batch's spec (`docs/specs/<id>.md` or `done/`): its "What must be true" is the contract.
+4. The change beyond the pack: `git diff <base>...<head> -- <file>`, plus uncommitted work in the worktree if one is named; files around a hunk only when the hunk is not enough.
+5. Where it matters: `docs/ARCHITECTURE.md` (placement, reuse, size rules), `docs/DECISIONS.md` and `docs/VISION.md` by grep.
+6. **A later round (a delta review):** the previous review file and the builder's answers, and only `git diff <old head>...<new head>` (`review-pack.py <branch> --base <old head>`); not the whole change again.
 
 ## What you check
 
@@ -50,6 +54,6 @@ Edit nothing, commit nothing, run no tests, start no containers, touch no other 
 | `GREEN WITH NOTES` | fix your own minors and nits in the **executor's worktree** (the path you were given), a trivial major too (a one-line test fix), one commit, then the same as `GREEN` |
 | `CHANGES NEEDED` | stop; edit nothing. The finding goes back to the executor, who knows the design; a fresh reviewer then checks only the delta (`review-2.md`) |
 
-**The gate** is `docs/HANDOVER.md` section 3, step 6, by the commands of its section 4<!-- if:e2e --> (e2e files under the lock, short, named)<!-- endif -->. A red: run it alone; a red your own fix caused is yours. If a fix of yours turns out bigger than you thought, revert it and mark that finding `major`.
+**The gate** is `python -I -X utf8 tools/ci/gate.py run <head>` (foreground, long timeout; `tools/ci/README.md`)<!-- if:e2e -->, e2e under its lock<!-- endif -->. `BUSY`: wait for the notice, then again; a red: run it alone; a red your own fix caused is yours. If a fix of yours turns out bigger than you thought, revert it and mark that finding `major`.
 
 Answer in at most 8 lines: `READY TO MERGE <id> head=<sha>` or the verdict, the count per severity, and the top three findings in one line each.
