@@ -11,7 +11,7 @@ files), prints what to add to your configs, and **never edits `opencode.jsonc` o
 | `tui-plugins/ctxpick/` | `tui-plugins/ctxpick/` (outside `plugins/`) | TUI plugin, listed in `cli.json` | context re-read every turn after a compaction |
 | `opencode.snippet.jsonc` | printed, you merge it | config | compaction at ~70% of a per-model `limit.input`, a small kept tail, lane aliases |
 | rtk | its own install | server plugin | ~58% of `git log`, ~46% of `git status` output |
-| pacer | later | server plugin + TUI part (`/pacer`) | reserved: `plugins/pacer/` and `tui-plugins/pacer/` |
+| `plugins/pacer/` | `plugins/pacer/` | server plugin + TUI part (`/pacer`), one folder, no `cli.json` line | model calls: wake-ups in a busy session wait and go out as one call; usage paced against the plan's limits |
 
 ## prompt-polish
 
@@ -32,6 +32,15 @@ upstream: https://github.com/Squikle/ctxpick (994c991); update by recopying
   you tick what stays and it writes a trimmed **new** session (the original is never changed).
 - A TUI plugin: add its folder to `"plugins"` in `cli.json` (deploy prints the line), then **restart the TUI**.
   The CLI in `bin/` needs **node >= 23.6** (it runs `.ts` directly).
+
+## pacer
+
+- Ported from the source project's build `4a410254a9`. How it works: [pacer.md](pacer.md).
+- Every toggle is off until `/pacer` (a pop-up). Batching holds wake-ups that arrive within `period` seconds of the
+  last turn and flushes them as one turn; pacing reads the plan's usage every 5 min and advises a lane cap.
+- One folder: the server part (`index.js`, `pacer.py`) and the TUI part (`tui.js`, `tui-core.js`, `footer.jsx`,
+  `rpc.js`) load from beside each other, so no `cli.json` line. Restart OpenCode, then the TUI. Needs python.
+- Tests stay in the kit (`tests/pacer/`, with a test-only `node_modules` stub); `deploy.py --global` never copies them.
 
 ## rtk
 

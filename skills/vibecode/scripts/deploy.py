@@ -51,6 +51,10 @@ def install_global(args: list) -> int:
         print("then restart the TUI. ctxpick's CLI (bin/) needs node >= 23.6.")
     print("\nprompt-polish: set POLISH_MODEL and ONLY_PROVIDERS at the top of plugins/prompt-polish/index.js.")
     print("rtk (not vendored): install rtk, then `rtk init -g --opencode`.")
+    if (kit / "plugins" / "pacer").is_dir():
+        print("pacer: no cli.json line (its TUI files load from beside index.js); restart OpenCode, then the TUI.")
+        print("  Everything is off until `/pacer`. Needs python (python3 off Windows; $PACER_PYTHON overrides).")
+        print("  How it works: " + (kit / "pacer.md").as_posix())
     print("\nMerge by hand into " + (home / "opencode.jsonc").as_posix() + " (deploy never edits it):\n")
     print((kit / "opencode.snippet.jsonc").read_text(encoding="utf-8"))
     return 0

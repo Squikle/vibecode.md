@@ -154,9 +154,10 @@ cp commands/vibecode.md ~/.config/opencode/commands/
 Claude Code users may put the skill in `~/.claude/skills/` instead.
 
 **Optional, for your own OpenCode** (not per project): `python -I -X utf8 skills/vibecode/scripts/deploy.py --global`
-installs the prompt-polish plugin and the ctxpick TUI plugin into your OpenCode config folder where missing, then prints
-the `cli.json` line and a compaction config snippet to merge by hand. It never edits your configs. Details:
-`skills/vibecode/templates/opencode-global/README.md`.
+installs the prompt-polish plugin, the ctxpick TUI plugin and the pacer into your OpenCode config folder where missing,
+then prints the `cli.json` line and a compaction config snippet to merge by hand. It never edits your configs. Details:
+`skills/vibecode/templates/opencode-global/README.md`; how the pacer batches and paces:
+`skills/vibecode/templates/opencode-global/pacer.md`.
 
 ## Usage
 
