@@ -60,6 +60,9 @@ Example, period 60 s:
 - `batch me` (on in a new slot) makes your typed prompts wait too. `/pacer batch me off` lets them through at once.
 - `/pacer flush` sends what is held now.
 - Heartbeats and automations are just more held items.
+- **A child still waiting on its own shell** is not a wake: its note rides along with the next real item (footer:
+  `child notes, sent with the next item (≤Nm)`). If the note asks something (a `?`, "should I", "confirm"...) or
+  carries a verdict in capitals (`BLOCKED`, `READY`, `DONE`, `FAILED`...), it is a normal held item.
 - Keep the period at 240 s or less: the prompt cache may expire at 5 min. The pop-up warns at 300 and 600.
 
 ## Restart safety

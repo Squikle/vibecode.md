@@ -39,6 +39,25 @@ test("classifier: deferrable needs state=running AND the still-running block", (
   assert.equal(isDeferrable({ role: "user", metadata: { source: "subagent" }, content: '<background-result kind="subagent" state="running">x</background-result>' }), false)
   assert.equal(isDeferrable(you('state="running" Background work still running')), false)
 })
+test("classifier: a running child that asks or reports a verdict is not deferred (a BLOCKED report was held 26 min)", () => {
+  const body = (t) => ({ id: "s" + t.length, role: "user", metadata: { source: "subagent", state: "running" },
+    content: `<background-result kind="subagent" sessionID="ses_c" state="running" description="d">${t}\n\nBackground work still running:\n- shell (Get-Content x | ? { $_ -match 'y' })</background-result>` })
+  assert.equal(isDeferrable(body("The after snapshot is queued behind another run's test-stack lock. Once it finishes I'll diff it, then run the gate.")), true, "narration; a ? in the shell list doesn't count")
+  assert.equal(isDeferrable(body("Step 2 is `BLOCKED`, the merge verdict is pending. Say if I should resolve it by hand.")), false)
+  assert.equal(isDeferrable(body("Should I merge it now?")), false)
+  assert.equal(isDeferrable(body("READY batch-7 4b17abb5; the gate still runs")), false)
+  assert.equal(isDeferrable(body("DONE with step 1; step 2 runs")), false)
+  assert.equal(isDeferrable(body("waiting; blocked by the lock, nothing to do yet")), true, "lower-case words are narration")
+  assert.equal(itemKind(body("BLOCKED on x")), "subagent")
+})
+test("batcher: held child notes are counted (waits), so the footer can say they only ride along", () => {
+  const cfg = { batch: true, period: 30, me: true }
+  let r = decideBatch({}, cfg, [sub("completed", true, "w1")], 10 * 60e3)
+  assert.equal(r.action, "hold"); assert.equal(r.st.held.waits, 1)
+  r = decideBatch(r.st, cfg, [you("hi")], 10 * 60e3 + 1000)
+  assert.equal(r.action, "hold"); assert.equal(r.st.held.waits, 1); assert.equal(r.st.held.ids.length, 2)
+  assert.equal(r.st.due, 10 * 60e3 + 1000 + 30e3, "a real item opens the 30 s window")
+})
 test("classifier: run start vs continuation", () => {
   assert.deepEqual(runStartTail([asst, you("a"), you("b")]).map((m) => m.id), ["ua", "ub"])
   assert.equal(runStartTail([you("a"), asst, tool]), null)          // tool result after assistant = continuation

@@ -45,7 +45,7 @@ upstream: https://github.com/Squikle/ctxpick (994c991); update by recopying
 
 ## pacer
 
-- Ported from the source project's build `d842e7b92b`. How it works: [pacer.md](pacer.md).
+- Ported from the source project's build `a8aa0ba192`. How it works: [pacer.md](pacer.md).
 - Every toggle is off until `/pacer` (a pop-up). Batching holds wake-ups for one `period` (from the first arrival by
   default, or from the last reply) and flushes them as one turn; `/now <prompt>` skips the wait. Pacing reads the
   plan's usage every 5 min and advises a lane cap.

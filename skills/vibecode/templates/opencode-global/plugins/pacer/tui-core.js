@@ -141,6 +141,8 @@ export function heldHere(st, sid, now) {
   if (!n) return null
   if (r.busy) return { n, left: null, when: "flush after this turn" }
   const left = Math.max(0, Math.ceil(((r.due ?? now) - now) / 1000))
+  // only notes of children waiting on their shells: they go with the next real item, the timer is just the cap
+  if (left && r.held.waits === n) return { n, left, when: `child notes, sent with the next item (≤${Math.ceil(left / 60)}m)` }
   return { n, left, when: left ? `flush in ${left}s` : "flushing…" }
 }
 // the prompt-footer line: the timer while something is held here, else this session's slot flags (so you can

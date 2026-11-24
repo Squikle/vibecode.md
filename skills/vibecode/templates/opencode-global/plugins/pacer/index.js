@@ -49,11 +49,17 @@ export function itemKind(m) {
   if (m?.role === "user" && meta?.source == null) return "you"
   return "other"
 }
-// A child that went idle but still waits on its own background shell: nothing to act on yet.
+// A child that went idle but still waits on its own background shell: nothing to act on yet, unless its words
+// (before the still-running list, whose commands may hold a `?`) ask something or carry a verdict.
+const MARK = "Background work still running"
+const VERDICT = /\b(BLOCKED|READY|DONE|MERGED|FAILED|ERROR|STOPPED)\b/ // capitals only: "blocked by the lock" is narration
+const ASK = /\b(say if|should i|tell me|your call|confirm|need your)\b/i
 export function isDeferrable(m) {
   const t = msgText(m)
   const sub = m?.metadata?.source === "subagent" || t.startsWith('<background-result kind="subagent"')
-  return sub && /state="running"/.test(t) && t.includes("Background work still running")
+  if (!sub || !/state="running"/.test(t) || !t.includes(MARK)) return false
+  const words = t.slice(t.indexOf(">") + 1, t.indexOf(MARK))
+  return !(/\?/.test(words) || VERDICT.test(words) || ASK.test(words))
 }
 // Run start = every message after the last assistant one is a user/synthetic input (a tool result there = continuation).
 // Returns those inputs, or null for a continuation.
@@ -205,12 +211,13 @@ export function decideBatch(st0, cfg, tail, now) {
   const kinds = tail.map(itemKind)
   const pass = (why) => ({ action: "pass", why, st: { ...st, lastRunStart: now, held: null, due: null, skipUntil: null } })
   const hold = (why, due, opened) => {
-    const held = st.held ? { ids: [...st.held.ids], since: st.held.since, kinds: { ...st.held.kinds } } : { ids: [], since: now, kinds: {} }
+    const held = st.held ? { ids: [...st.held.ids], since: st.held.since, kinds: { ...st.held.kinds }, waits: st.held.waits ?? 0 } : { ids: [], since: now, kinds: {}, waits: 0 }
     if (st.held?.opened != null || opened != null) held.opened = st.held?.opened ?? opened
     tail.forEach((m, i) => {
       const id = m?.id ?? `${now}-${i}`
       if (held.ids.includes(id)) return
       held.ids.push(id)
+      if (kinds[i] === "subagent-wait") held.waits++ // the footer: only child notes held = they ride along
       const k = kinds[i] === "subagent-wait" ? "subagent" : kinds[i]
       held.kinds[k] = (held.kinds[k] ?? 0) + 1
     })

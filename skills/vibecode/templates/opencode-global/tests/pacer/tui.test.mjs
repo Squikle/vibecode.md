@@ -129,6 +129,12 @@ test("server: pace on|off keeps batch; the slot goes only when both are off", ()
   assert.equal(applyOp(emptyToggles(), "ses_A", "A", parseArgs("pace off")).changed, false)
 })
 
+test("held here: only child notes held = they ride along, not a long countdown (seen live: `flush in 1570s` at batch 30s)", () => {
+  const w = (waits, due) => ({ rt: { ses_A: { held: { ids: ["x", "y"], since: NOW, kinds: { subagent: 2 }, waits }, due, busy: false } } })
+  assert.equal(heldHere(w(2, NOW + 1_570_000), "ses_A", NOW).when, "child notes, sent with the next item (≤27m)")
+  assert.equal(heldHere(w(1, NOW + 23_000), "ses_A", NOW).when, "flush in 23s", "a real item held: the normal timer")
+  assert.equal(heldHere(w(undefined, NOW + 23_000), "ses_A", NOW).when, "flush in 23s", "old state without waits")
+})
 test("held here: footer timer text, and a `flush now` row only while this slot holds something", () => {
   const held = (o = {}) => ({ ...st, rt: { ...st.rt, ses_A: { held: { ids: ["x", "y"], since: NOW - 5e3, kinds: {} }, due: NOW + 22_400, busy: false, ...o } } })
   assert.deepEqual(heldHere(held(), "ses_A", NOW), { n: 2, left: 23, when: "flush in 23s" })
