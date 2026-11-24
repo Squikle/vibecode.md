@@ -25,7 +25,7 @@ flowchart LR
   C --> I[Integrator]
   R -. "[smell] tags" .-> CTO
   I -. "doc size line" .-> L
-  M -. "/ask" .-> H[Small-model lookup]
+  ANY["any session<br/>owner, planner, CTO, executors..."] -. "/ask: one lookup<br/>or up to 5 at once" .-> H[Small-model lookup]
 ```
 
 ### 2. A big task, from the owner's words to the running app
