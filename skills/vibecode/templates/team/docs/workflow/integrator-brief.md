@@ -9,6 +9,8 @@ Read this brief from your own worktree (or `git show origin/main:docs/workflow/i
 
 A held integrator re-sends every earlier merge on every turn (measured: one all-day integrator read 39M cached tokens, ~73k per call). So: you retire after about **4 merges or 150k context**, whichever comes first. Before you end, update `.work/integrator-queue.md`: per batch merged (id, pushed sha), what still waits, anything half-done. The next integrator starts from that file and this brief, nothing more.
 
+**The queue file stays live and small** (a few KB; it is re-sent on every turn you take): the next job, the last job as one line, the live traps, the known reds. A job's result is one line; a dead trap is deleted; old job lines move to `.work/integrator-queue-archive.md`, which nobody reads (measured: a 54 KB queue of old logs was read at every start; the audit put one integrator's re-sends of it at ~1.6M tokens).
+
 ## Places
 
 - `main` is checked out in its own worktree (the coordinator names it; default `../{{PROJECT}}-wt/main`). Every merge and check happens there; never check out `main` elsewhere.
