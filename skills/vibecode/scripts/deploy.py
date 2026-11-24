@@ -37,7 +37,7 @@ def install_global(args: list) -> int:
                 continue
             dst.parent.mkdir(parents=True, exist_ok=True)
             if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=True)
+                shutil.copytree(src, dst, dirs_exist_ok=True, ignore=shutil.ignore_patterns("__pycache__"))
             else:
                 shutil.copy2(src, dst)
             done.append(f"{sub}/{src.name}")
@@ -112,7 +112,7 @@ for group in ["always", "team", "solo", "reviewers", "e2e", "remote"]:
     root = base / group
     if not flags[group] or not root.exists():
         continue
-    for src in sorted(p for p in root.rglob("*") if p.is_file()):
+    for src in sorted(p for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts):  # a local test run leaves .pyc
         rel = src.relative_to(root)
         text = fill(src.read_text(encoding="utf-8"))
         if rel.name in ("gitignore", "gitattributes"):
