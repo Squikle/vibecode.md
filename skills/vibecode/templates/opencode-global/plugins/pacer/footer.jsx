@@ -1,5 +1,5 @@
-// pacer's live timer in the prompt footer: "pacer: 2 held · flush in 23s", else the slot's batch setting
-// ("pacer: batch 60s · nothing held"), empty in a session with no slot. Its own file so a JSX failure leaves the pop-up alone (tui.js imports it in a try).
+// pacer's live timer in the prompt footer: "pacer: 2 held · flush in 23s", empty while nothing is held in
+// this session. Its own file so a JSX failure leaves the pop-up alone (tui.js imports it in a try).
 // read(sessionID) -> the line (tui-core.js footerText over plugin-state.json); re-read every second.
 import { createSignal, onCleanup } from "solid-js"
 

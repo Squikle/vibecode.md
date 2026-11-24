@@ -6,7 +6,7 @@ import { Plugin } from "@opencode/plugin/tui"
 import { readFileSync, statSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { parseStatus, headline, rows, rowAction, newSlotCommand, slashRoute, replyToast, footerText } from "./tui-core.js"
+import { parseStatus, headline, rows, rowAction, newSlotCommand, slashRoute, nowRoute, replyToast, footerText } from "./tui-core.js"
 
 const DATA = process.env.PACER_DATA || join(homedir(), ".local", "share", "pacer")
 const TOGGLES = join(DATA, "toggles.json"), STATE = join(DATA, "plugin-state.json")
@@ -34,14 +34,14 @@ export default Plugin.define({
     }
     // the one write path: the server's RPC (it returns the reply: a status goes into the transcript, anything
     // else comes back here as a toast). Old server without the RPC: its /pacer command posts the reply itself.
-    const send = async (sessionID, cmd, wait = true) => {
+    const send = async (sessionID, cmd, wait = true, quiet = false) => {
       const def = await pacerRpc()
       let rpcErr
       if (def) {
         try {
           const r = await context.client.rpc(def).command({ sessionID, text: cmd })
           const t = replyToast(cmd, r?.reply)
-          if (t) toast(t.message, t.variant)
+          if (t && !(quiet && t.variant === "success")) toast(t.message, t.variant)
           return
         } catch (e) { rpcErr = e }
       }
@@ -100,6 +100,20 @@ export default Plugin.define({
       } catch (e) { toast(`pacer: ${msg(e)}`, "error") }
     }
 
+    // /now <prompt>: a one-shot pass on the server (awaited, so it is set before the prompt lands), then the
+    // prompt as typed. Bare /now = flush what is held now. No pass flag (old server): the prompt still goes in,
+    // it just takes the normal batch wait.
+    async function now(input) {
+      try {
+        const sid = sessionNow()
+        if (!sid) return toast("Open a session first", "warning")
+        const r = nowRoute(input)
+        if (r.kind === "flush") return await send(sid, "flush", false)
+        try { await send(sid, "now", false, true) } catch (e) { toast(`/now: no pass (${msg(e)}); the prompt waits like any other`, "warning") }
+        await context.client.session.prompt({ sessionID: sid, text: r.text })
+      } catch (e) { toast(`/now failed: ${msg(e)}`, "error") }
+    }
+
     try {
       context.keymap.layer(() => ({
         mode: "global",
@@ -113,6 +127,15 @@ export default Plugin.define({
             // arguments: the TUI owns submit for /pacer; typed args go to the server's RPC unchanged
             slash: { name: "pacer", arguments: true },
             run: (input) => { void run(input) },
+          },
+          {
+            id: "pacer.now",
+            title: "pacer: send now",
+            description: "/now <prompt> skips the batch wait (held items ride along); bare /now flushes",
+            group: "Session",
+            palette: true,
+            slash: { name: "now", arguments: true },
+            run: (input) => { void now(input) },
           },
         ],
       }))

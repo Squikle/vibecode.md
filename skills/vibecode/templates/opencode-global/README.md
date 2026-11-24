@@ -35,9 +35,10 @@ upstream: https://github.com/Squikle/ctxpick (994c991); update by recopying
 
 ## pacer
 
-- Ported from the source project's build `4a410254a9`. How it works: [pacer.md](pacer.md).
-- Every toggle is off until `/pacer` (a pop-up). Batching holds wake-ups that arrive within `period` seconds of the
-  last turn and flushes them as one turn; pacing reads the plan's usage every 5 min and advises a lane cap.
+- Ported from the source project's build `d842e7b92b`. How it works: [pacer.md](pacer.md).
+- Every toggle is off until `/pacer` (a pop-up). Batching holds wake-ups for one `period` (from the first arrival by
+  default, or from the last reply) and flushes them as one turn; `/now <prompt>` skips the wait. Pacing reads the
+  plan's usage every 5 min and advises a lane cap.
 - One folder: the server part (`index.js`, `pacer.py`) and the TUI part (`tui.js`, `tui-core.js`, `footer.jsx`,
   `rpc.js`) load from beside each other, so no `cli.json` line. Restart OpenCode, then the TUI. Needs python.
 - Tests stay in the kit (`tests/pacer/`, with a test-only `node_modules` stub); `deploy.py --global` never copies them.

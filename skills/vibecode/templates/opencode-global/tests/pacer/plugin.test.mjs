@@ -3,7 +3,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {
   itemKind, isDeferrable, runStartTail, stripOwn, parseArgs, applyOp, emptyToggles, slotOf, cfgOf,
-  decideBatch, flushText, globalBlocks, paceMessage, statusText, DEFER_MAX, USAGE, validName, uiParts,
+  decideBatch, flushText, globalBlocks, paceMessage, statusText, DEFER_MAX, USAGE, validName, uiParts, fromOf,
 } from "../../plugins/pacer/index.js"
 import plugin from "../../plugins/pacer/index.js"
 
@@ -29,6 +29,9 @@ test("classifier: typed prompt, subagent, deferrable subagent, shell, pacer", ()
   assert.equal(itemKind({ role: "user", content: sub("completed", true).content }), "subagent-wait")
   // empty metadata object = typed
   assert.equal(itemKind({ role: "user", metadata: {}, content: "x" }), "you")
+  // a typed prompt another plugin decorated (e.g. prompt-polish) is still yours
+  assert.equal(itemKind({ role: "user", metadata: { promptPolish: { v: 1 } }, content: "x" }), "you")
+  assert.equal(itemKind({ role: "assistant", metadata: { promptPolish: {} }, content: "x" }), "other")
 })
 test("classifier: deferrable needs state=running AND the still-running block", () => {
   assert.equal(isDeferrable(sub("completed", true)), true)
@@ -50,7 +53,56 @@ test("strip: pacer status/notice leave the outgoing call, flush/note/wake stay",
 })
 
 // ---------------------------------------------------------------- throttle (batcher)
-const cfg = { batch: true, period: 60, me: true }
+const cfg = { batch: true, period: 60, me: true, from: "reply" } // the throttle tests below pin the reply mode
+const arr = { batch: true, period: 60, me: true }                  // no `from` = arrival (the default)
+// the hook's copy of OpenCode's auto-compaction continuation (seen live 2026-11-24 15:57 + 16:08: `user:keepID+recent`)
+const compact = (id = "c1") => ({ id, role: "user", metadata: { keepID: "msg_20f5f0189001s7wjVS4ZPGWHte", recent: [] }, content: "" })
+test("compaction: its continuation is my own turn going on, so it always passes (and held items ride along)", () => {
+  assert.equal(itemKind(compact()), "compaction")
+  for (const c of [arr, cfg, { ...arr, me: false }]) {
+    const r = decideBatch({ lastRunStart: 1.8e12 - 1000 }, c, [compact()], 1.8e12)
+    assert.equal(r.action, "pass", JSON.stringify(c)); assert.equal(r.why, "compaction continues the turn")
+  }
+  const held = { lastRunStart: 1000, held: { ids: ["s1"], since: 1500, kinds: { subagent: 1 }, opened: 1500 }, due: 61.5e3 }
+  const r = decideBatch(held, arr, [sub("completed", false, "s1"), compact()], 2000)
+  assert.equal(r.action, "pass"); assert.equal(r.st.held, null)
+})
+test("arrival (default): the first item opens a 60 s window, later ones join, the window never restarts", () => {
+  const T = 1.8e12
+  // a long quiet: reply mode would pass at once, arrival holds the first item for one period
+  let r = decideBatch({ lastRunStart: T - 3600e3, lastRunEnd: T - 3000e3 }, arr, [you("a", "y1")], T)
+  assert.equal(r.action, "hold"); assert.equal(r.st.due, T + 60e3); assert.equal(r.st.held.opened, T)
+  assert.match(r.why, /window 60s from the first arrival/)
+  r = decideBatch(r.st, arr, [you("a", "y1"), sub("completed", false, "s1")], T + 20e3)
+  assert.equal(r.action, "hold"); assert.equal(r.st.due, T + 60e3, "a later arrival joins; the window does not restart")
+  r = decideBatch(r.st, arr, [you("a", "y1"), sub("completed", false, "s1"), shell("sh1")], T + 59e3)
+  assert.equal(r.st.due, T + 60e3); assert.deepEqual(r.st.held.kinds, { you: 1, subagent: 1, shell: 1 })
+  // an arrival after the due (before the tick flushed) passes with everything held
+  r = decideBatch(r.st, arr, [shell("sh2")], T + 60.5e3)
+  assert.equal(r.action, "pass"); assert.equal(r.why, "window over"); assert.equal(r.st.held, null)
+  // the next batch opens its own window at its first arrival
+  r = decideBatch(r.st, arr, [shell("sh3")], T + 70e3)
+  assert.equal(r.action, "hold"); assert.equal(r.st.due, T + 130e3)
+  assert.equal(fromOf(arr), "arrival"); assert.equal(fromOf(cfg), "reply"); assert.equal(fromOf({ from: "junk" }), "arrival")
+})
+test("arrival: children waiting on their shells keep the 30 min cap; the first real item opens the window", () => {
+  let r = decideBatch({}, arr, [sub("completed", true, "w1")], 10 * 60e3)
+  assert.equal(r.action, "hold"); assert.equal(r.st.due, 10 * 60e3 + DEFER_MAX); assert.equal(r.st.held.opened, undefined)
+  r = decideBatch(r.st, arr, [sub("completed", true, "w1"), shell("sh1")], 12 * 60e3)
+  assert.equal(r.action, "hold"); assert.equal(r.st.due, 12 * 60e3 + 60e3, "not the 30 min cap"); assert.equal(r.st.held.opened, 12 * 60e3)
+  // a held batch from the reply mode keeps its earlier due when the mode flips
+  r = decideBatch({ held: { ids: ["x"], since: 1000, kinds: { shell: 1 } }, due: 20e3 }, arr, [shell("x"), shell("y")], 5000)
+  assert.equal(r.st.due, 20e3)
+})
+test("/now: a skip flag passes the next run start once; an expired one is dropped", () => {
+  const st = { lastRunStart: 5000, held: { ids: ["s1"], since: 5500, kinds: { subagent: 1 } }, due: 66e3, skipUntil: 20e3 }
+  let r = decideBatch(st, arr, [sub("completed", false, "s1"), you("now please", "y1")], 6000)
+  assert.equal(r.action, "pass"); assert.equal(r.why, "/now"); assert.equal(r.st.held, null); assert.equal(r.st.skipUntil, null)
+  r = decideBatch({ ...st, skipUntil: 5000 }, arr, [you("late", "y2")], 6000)
+  assert.equal(r.action, "hold"); assert.equal(r.st.skipUntil, null, "expired: cleared, not kept")
+  // a prompt marked /now passes too (pacer metadata kind "now")
+  assert.equal(decideBatch({ lastRunStart: 5000 }, arr, [pacerMsg("now")], 6000).why, "/now")
+})
 test("throttle: first run passes, a second within the period is held until lastRunStart+period", () => {
   const T = 1.8e12 // epoch ms: a fresh session (lastRunStart 0) is always "elapsed"
   let r = decideBatch({}, cfg, [you("a")], T)
@@ -129,9 +181,12 @@ test("parser: every /pacer form", () => {
   assert.deepEqual(P("flush"), { op: "flush" }); assert.deepEqual(P("flush w2"), { op: "flush", name: "w2" })
   assert.deepEqual(P("flush a b"), { op: "usage" }); assert.equal(validName("flush"), false)
   assert.ok(USAGE.includes("flush [slot]"))
+  assert.deepEqual(P("batch from arrival"), { op: "from", from: "arrival" }); assert.deepEqual(P("batch from Reply w2"), { op: "from", from: "reply", name: "w2" })
+  assert.deepEqual(P("now"), { op: "now" }); assert.equal(validName("from"), false); assert.equal(validName("now"), false)
+  assert.ok(USAGE.includes("batch from arrival|reply [slot]") && USAGE.includes("| now |"))
 })
 test("parser: junk -> usage", () => {
-  for (const s of ["batch 14", "batch 601", "batch", "batch me", "week", "global maybe", "on a b", "on all", "on Me", "move on", "frobnicate", "batch 60 bad/name"])
+  for (const s of ["batch 14", "batch 601", "batch", "batch me", "week", "global maybe", "on a b", "on all", "on Me", "move on", "frobnicate", "batch 60 bad/name", "batch from", "batch from later", "now x"])
     assert.deepEqual(parseArgs(s), { op: "usage" }, s)
   assert.equal(validName("main"), true); assert.equal(validName("a".repeat(33)), false); assert.equal(validName("-x"), false)
   assert.match(applyOp(emptyToggles(), "s1", "T", { op: "usage" }).reply, /usage:/)
@@ -163,6 +218,11 @@ test("slots: two slots run side by side, each with its own flags and period", ()
   // batch me needs an existing slot
   const r4 = on(emptyToggles(), C, "X", "batch me off"); assert.equal(r4.changed, false); assert.match(r4.reply, /batch on/)
   assert.equal(on(tg, B, "Proj2", "batch me off").tg.slots.work.me, false)
+  // batch from: needs a slot too; sets the mode on this session's slot only
+  const r5 = on(emptyToggles(), C, "X", "batch from reply"); assert.equal(r5.changed, false); assert.match(r5.reply, /batch on/)
+  const r6 = on(tg, B, "Proj2", "batch from reply")
+  assert.equal(r6.tg.slots.work.from, "reply"); assert.equal(r6.tg.slots.main.from, undefined); assert.match(r6.reply, /from reply: the 120s count from my last run/)
+  assert.match(on(r6.tg, B, "Proj2", "batch from arrival").reply, /from arrival: the first held item opens a 120s window/)
 })
 test("slots: off [name], batch off, off all", () => {
   let tg = on(emptyToggles(), A, "Alpha", "on").tg
@@ -200,7 +260,8 @@ test("status: lists every slot with title, flags, last-run age", () => {
   const now = Date.now()
   const t = statusText({ tg, sid: A, pace: null, counters: {}, rt: { [A]: { lastRun: now - 5 * 60e3 } }, now })
   assert.match(t, /- main: Alpha \(this\) \| pace \| last run 5 min ago/)
-  assert.match(t, /- work: Proj2 \| batch 120s \| last run never/)
+  assert.match(t, /- work: Proj2 \| batch 120s from arrival \| last run never/)
+  assert.match(statusText({ tg: on(tg, B, "Proj2", "batch from reply").tg, sid: A, pace: null, counters: {}, rt: {}, now }), /- work: Proj2 \| batch 120s from reply \|/)
   assert.match(t, /this session: slot main/)
   assert.match(statusText({ tg: emptyToggles(), sid: C, pace: null, now }), /slots: none/)
   // held right now: count, since, when it flushes, how to flush now

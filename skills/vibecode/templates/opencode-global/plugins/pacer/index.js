@@ -19,9 +19,10 @@ export const LOG_MAX = 1 << 20            // plugin.log rotates at 1 MB
 export const IDLE_WAKE = 50 * 60e3        // HOLD warm-only ping: idle this long (pacer.py rule)
 export const MODE_WAKE_IDLE = 10 * 60e3   // a mode with more lanes wakes a session idle this long (pacer.py rule)
 export const LANES = { GO: 5, EASE: 3, SLOW: 2, HOLD: 0, BURST: 7, LIMITED: 0 }
-export const USAGE = "usage: /pacer [status] | on [slot] | off [slot] | off all | pace on|off [slot] | move [slot] | batch on|off [slot] | batch <15..600> [slot] | batch me on|off [slot] | flush [slot] | week on|off | global on|off   (slot defaults to this session's, else main)"
+export const USAGE = "usage: /pacer [status] | on [slot] | off [slot] | off all | pace on|off [slot] | move [slot] | batch on|off [slot] | batch <15..600> [slot] | batch me on|off [slot] | batch from arrival|reply [slot] | flush [slot] | now | week on|off | global on|off   (slot defaults to this session's, else main)"
+export const SKIP_MS = 15e3               // `/pacer now` (the TUI's /now): the next run start within this passes
 const STRIP = new Set(["status", "notice"])  // pacer's own replies: shown in the TUI, never sent to the model
-const PASS = new Set(["flush", "wake"])      // pacer's own wakes: always pass the batcher
+const PASS = new Set(["flush", "wake", "now"]) // pacer's own wakes and /now prompts: always pass the batcher
 
 // ---------------------------------------------------------------- pure helpers
 export const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` }
@@ -36,13 +37,16 @@ export function msgText(m) {
 }
 export const pacerKind = (m) => { const p = m?.metadata?.pacer; return p ? (typeof p === "object" ? p.kind ?? "other" : "other") : null }
 
-// What one input message is. "you" = a prompt the user typed (role user, no metadata).
+// What one input message is. "you" = a prompt the user typed (role user, no `source` / pacer / compaction metadata).
 export function itemKind(m) {
   if (pacerKind(m)) return "pacer"
   const meta = m?.metadata, text = msgText(m)
   if (meta?.source === "subagent" || text.startsWith('<background-result kind="subagent"')) return isDeferrable(m) ? "subagent-wait" : "subagent"
   if (meta?.source === "shell" || text.startsWith('<background-result kind="shell"')) return "shell"
-  if (m?.role === "user" && (!meta || Object.keys(meta).length === 0)) return "you"
+  // OpenCode's auto-compaction continuation (metadata keepID + recent): the running turn going on, never a wake
+  if (meta && meta.keepID != null) return "compaction"
+  // a user message with no source: typed (other plugins may decorate it, e.g. prompt-polish)
+  if (m?.role === "user" && meta?.source == null) return "you"
   return "other"
 }
 // A child that went idle but still waits on its own background shell: nothing to act on yet.
@@ -77,7 +81,7 @@ export function uiParts(text, kind) {
 }
 
 // /pacer args. Slot names: a-z 0-9 _ - (max 32), not a keyword. Default slot = this session's, else "main".
-const KEYWORDS = new Set(["on", "off", "all", "status", "move", "week", "global", "batch", "me", "pace", "flush"])
+const KEYWORDS = new Set(["on", "off", "all", "status", "move", "week", "global", "batch", "me", "pace", "flush", "from", "now"])
 export const validName = (n) => /^[a-z0-9][a-z0-9_-]{0,31}$/.test(n) && !KEYWORDS.has(n)
 export function parseArgs(raw) {
   const w = String(raw ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -91,9 +95,11 @@ export function parseArgs(raw) {
   if (w[0] === "off") return w.length === 2 && w[1] === "all" ? { op: "offall" } : named({ op: "off" }, w.slice(1))
   if (w[0] === "move") return named({ op: "move" }, w.slice(1))
   if (w[0] === "flush") return named({ op: "flush" }, w.slice(1))
+  if (w[0] === "now") return w.length === 1 ? { op: "now" } : bad
   if ((w[0] === "week" || w[0] === "global") && w.length === 2 && oo(w[1]) !== undefined) return { op: w[0], on: oo(w[1]) }
   if (w[0] === "batch" && w.length >= 2) {
     if (w[1] === "me") return w.length >= 3 && oo(w[2]) !== undefined ? named({ op: "me", on: oo(w[2]) }, w.slice(3)) : bad
+    if (w[1] === "from") return w[2] === "arrival" || w[2] === "reply" ? named({ op: "from", from: w[2] }, w.slice(3)) : bad
     if (oo(w[1]) !== undefined) return named({ op: "batch", on: oo(w[1]) }, w.slice(2))
     if (/^\d+$/.test(w[1])) return +w[1] >= 15 && +w[1] <= 600 ? named({ op: "period", period: +w[1] }, w.slice(2)) : bad
   }
@@ -148,6 +154,9 @@ export function applyOp(tg0, sid, title, op) {
       break
     case "period": setSlot(true, (s) => { s.period = op.period; s.batch = true }, (s) => `batch on, every ${s.period}s.`); break
     case "me": setSlot(false, (s) => (s.me = op.on), () => (op.on ? "batch me on: your prompts wait for the period too." : "batch me off: your prompts pass at once.")); break
+    case "from": setSlot(false, (s) => (s.from = op.from), (s) => (op.from === "arrival"
+      ? `batch from arrival: the first held item opens a ${s.period ?? 60}s window; what comes in it joins one flush.`
+      : `batch from reply: the ${s.period ?? 60}s count from my last run; after a quiet period a wake passes at once.`)); break
     case "off": {
       const name = op.name ?? own
       if (!name) { no("this session holds no slot."); break }
@@ -182,16 +191,22 @@ export function applyOp(tg0, sid, title, op) {
   return { tg, reply: `[pacer] ${reply}`, changed }
 }
 
-// The batcher. st = per-session runtime { lastRunStart, lastRunEnd, held: { ids[], since, kinds{} } | null, due }.
-// The period counts from the later of the last passed run's start and its end: after a long turn, whatever
-// arrives in the next period waits for one flush. A held batch's due never moves later.
+// The batcher. st = per-session runtime { lastRunStart, lastRunEnd, held: { ids[], since, kinds{}, opened? } | null,
+// due, skipUntil }. cfg.from picks where the period counts from:
+// - "arrival" (default): the first held item opens a window of one period; whatever arrives in it joins, and the
+//   window never restarts, so the wait stays bounded. A prompt after a long quiet waits one period too.
+// - "reply": from the later of the last passed run's start and its end: after a long turn, whatever arrives in
+//   the next period waits for one flush; after a quiet period it passes at once.
+// A held batch's due never moves later. skipUntil (`/pacer now`, the TUI's /now): the next run start passes.
 // Returns { action: "pass"|"hold", why, st } (st is a new object).
+export const fromOf = (cfg) => (cfg?.from === "reply" ? "reply" : "arrival")
 export function decideBatch(st0, cfg, tail, now) {
   const st = { lastRunStart: 0, lastRunEnd: 0, held: null, due: null, ...st0 }
   const kinds = tail.map(itemKind)
-  const pass = (why) => ({ action: "pass", why, st: { ...st, lastRunStart: now, held: null, due: null } })
-  const hold = (why, due) => {
+  const pass = (why) => ({ action: "pass", why, st: { ...st, lastRunStart: now, held: null, due: null, skipUntil: null } })
+  const hold = (why, due, opened) => {
     const held = st.held ? { ids: [...st.held.ids], since: st.held.since, kinds: { ...st.held.kinds } } : { ids: [], since: now, kinds: {} }
+    if (st.held?.opened != null || opened != null) held.opened = st.held?.opened ?? opened
     tail.forEach((m, i) => {
       const id = m?.id ?? `${now}-${i}`
       if (held.ids.includes(id)) return
@@ -199,9 +214,12 @@ export function decideBatch(st0, cfg, tail, now) {
       const k = kinds[i] === "subagent-wait" ? "subagent" : kinds[i]
       held.kinds[k] = (held.kinds[k] ?? 0) + 1
     })
-    return { action: "hold", why, st: { ...st, held, due } }
+    return { action: "hold", why, st: { ...st, held, due, skipUntil: st.skipUntil && now <= st.skipUntil ? st.skipUntil : null } }
   }
+  if (tail.some((m) => pacerKind(m) === "now")) return pass("/now")
   if (tail.some((m) => PASS.has(pacerKind(m)))) return pass("pacer flush")
+  if (kinds.includes("compaction")) return pass("compaction continues the turn")
+  if (st.skipUntil && now <= st.skipUntil) return pass("/now")
   if (!cfg.me && kinds.includes("you")) return pass("typed prompt, me off")
   const real = kinds.filter((k) => k !== "pacer")
   if (real.length && real.every((k) => k === "subagent-wait")) {
@@ -209,6 +227,13 @@ export function decideBatch(st0, cfg, tail, now) {
     return hold("only children waiting on their shells", Math.min(st.due ?? Infinity, since + DEFER_MAX))
   }
   const periodMs = (cfg.period ?? 60) * 1000
+  if (fromOf(cfg) === "arrival") {
+    // the window opens at the first held item that is not a child waiting on its shell
+    const opened = st.held?.opened ?? now
+    const due = Math.min(st.held && st.due != null ? st.due : Infinity, opened + periodMs)
+    if (now >= due) return pass("window over")
+    return hold(`window ${cfg.period ?? 60}s from the first arrival`, due, opened)
+  }
   const base = Math.max(st.lastRunStart ?? 0, st.lastRunEnd ?? 0)
   if (now - base >= periodMs) return pass("period elapsed")
   const due = st.held && st.due != null ? Math.min(st.due, base + periodMs) : base + periodMs
@@ -278,7 +303,7 @@ export function statusText({ tg, sid, pace, counters, rt, now }) {
     L.push("slots:")
     for (const n of names) {
       const f = tg.slots[n]
-      const flags = [f.pace && "pace", f.batch && `batch ${f.period ?? 60}s${f.me === false ? " (me off)" : ""}`].filter(Boolean).join(" + ")
+      const flags = [f.pace && "pace", f.batch && `batch ${f.period ?? 60}s from ${fromOf(f)}${f.me === false ? " (me off)" : ""}`].filter(Boolean).join(" + ")
       L.push(`- ${n}: ${titleOf(f)}${f.sid === sid ? " (this)" : ""} | ${flags} | last run ${ago(rt?.[f.sid]?.lastRun, now)}`)
     }
   }
@@ -439,7 +464,7 @@ function createCore() {
       const s = rt(slot.sid)
       const m = paceMessage(R.prevPace, R.pace, s, now, name)
       if (!m) continue
-      s.pending = { text: m.text, wake: m.wake || !!s.pending?.wake, why: m.why }
+      s.pending = { text: m.text, wake: m.wake || !!s.pending?.wake, why: m.why, at: s.pending?.at ?? now }
       dirty = true
       log("pace-msg", { slot: name, sid: slot.sid.slice(0, 20), why: m.why, wake: m.wake })
     }
@@ -466,7 +491,9 @@ function createCore() {
           else if (!s.pending) s.pending = { text, why, wake: false } // failed: retry next tick
           continue
         }
-        const batchDue = cfg?.batch ? Math.max(s.due ?? 0, s.pending ? Math.max(s.lastRunStart ?? 0, s.lastRunEnd ?? 0) + (cfg.period ?? 60) * 1000 : 0) : 0
+        // a pace wake with nothing held: arrival mode opens its own window at the wake; reply mode counts from the last run
+        const wakeBase = !s.pending ? 0 : fromOf(cfg) === "arrival" ? (s.pending.at ?? 0) : Math.max(s.lastRunStart ?? 0, s.lastRunEnd ?? 0)
+        const batchDue = cfg?.batch ? Math.max(s.due ?? 0, s.pending ? wakeBase + (cfg.period ?? 60) * 1000 : 0) : 0
         const due = s.held ? (cfg?.batch ? s.due ?? now : now) : batchDue // no batch any more: flush held at once
         if (s.busy || now < due) continue
         const text = flushText(s.held, s.pending?.text, now)
@@ -516,11 +543,13 @@ function createCore() {
       const ok = await hold(c, sid)
       if (!ok) { log("hold-failed", { sid: sid.slice(0, 20), why: r.why }); return } // nothing stopped: let it run
       const before = s.held?.ids.length ?? 0
-      Object.assign(s, { lastRunStart: r.st.lastRunStart, held: r.st.held, due: r.st.due, busy: false, idleSince: now })
+      Object.assign(s, { lastRunStart: r.st.lastRunStart, held: r.st.held, due: r.st.due, skipUntil: r.st.skipUntil, busy: false, idleSince: now })
       count(sid, "held"); count(sid, "items", (s.held?.ids.length ?? 0) - before)
-      log("hold", { sid: sid.slice(0, 20), why: r.why, items: s.held?.ids.length, due: hhmm(s.due) })
+      // an "other" item: log its shape (role + metadata keys, never the text) so the classifier can learn it
+      const other = tail.filter((m) => itemKind(m) === "other").map((m) => `${m?.role}:${Object.keys(m?.metadata ?? {}).join("+") || "-"}`)
+      log("hold", { sid: sid.slice(0, 20), why: r.why, items: s.held?.ids.length, due: hhmmss(s.due), ...(other.length ? { other } : {}) })
     } else {
-      Object.assign(s, { lastRunStart: r.st.lastRunStart, held: null, due: null, ran: true })
+      Object.assign(s, { lastRunStart: r.st.lastRunStart, held: null, due: null, skipUntil: null, ran: true })
       if (s.pending?.wake) s.pending = { ...s.pending, wake: false } // rides along as a note
       count(sid, "passed")
       log("pass", { sid: sid.slice(0, 20), why: r.why, n: tail.length })
@@ -567,6 +596,16 @@ function createCore() {
           reply = `[pacer] slot ${name}: flushing ${s.held.ids.length} held ${s.busy ? "after the running turn" : "now"}.`
         }
         log("cmd", { sid: String(sid).slice(0, 20), op: "flush", name })
+      } else if (op.op === "now") {
+        // one-shot: the next run start here passes the batcher (the TUI's /now sends its prompt right after)
+        // a running turn takes the prompt as a steer (no run start), so no flag: it would let the next wake pass
+        const s = rt(sid), n = s.held?.ids?.length ?? 0
+        if (s.busy) reply = "[pacer] now: a turn is running; your prompt goes straight into it."
+        else {
+          s.skipUntil = now + SKIP_MS; dirty = true
+          reply = `[pacer] now: your next prompt passes${n ? `; the ${n} held ride along` : ""}.`
+        }
+        log("cmd", { sid: String(sid).slice(0, 20), op: "now", held: n, busy: !!s.busy })
       } else {
         const title = (await getInfo(sid)).title
         const r = applyOp(toggles(), sid, title, op)

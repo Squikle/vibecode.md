@@ -30,22 +30,33 @@ it on with `/pacer`.
 
 ## Batching
 
-When a run is about to start, the server looks at when the session's last turn ended. Less than `period` seconds ago
-(60 s by default, 15..600) = the run stops before any model call, so it costs 0 tokens. The message itself stays in
-the session; nothing is dropped.
+When a run is about to start and the batch window is still open, the run stops before any model call, so it costs
+0 tokens. The message itself stays in the session; nothing is dropped. A 1 s tick watches the held items. When the
+window closes, it posts one flush note, and the model reads every held item in one turn. N wake-ups = 1 model call.
 
-A 1 s tick watches the held items. When the period is up, it posts one flush note, and the model reads every held
-item in one turn. N wake-ups = 1 model call.
+**Where the window counts from** (`/pacer batch from arrival|reply`, or the pop-up's `from` row; `period` is 60 s
+by default, 15..600):
+
+| Mode | The window | After a long quiet |
+|---|---|---|
+| **arrival** (default) | opens at the first held item and lasts one period; whatever comes in it joins the same flush. It never restarts, so nothing waits longer than one period | a new item still waits one period |
+| **reply** | counts from the later of the last turn's start and end | a new item passes at once |
 
 Example, period 60 s:
 
-| Time | Event | Model call |
-|---|---|---|
-| 12:00:00 | the session's turn ends | |
-| 12:00:20 | child A's result arrives | held (20 s < 60 s) |
-| 12:00:50 | child B's result arrives | held |
-| 12:01:00 | the tick posts one flush note | **one** turn reads A and B |
+| Time | Event | arrival | reply |
+|---|---|---|---|
+| 12:00:00 | the session's turn ends | | |
+| 12:00:20 | child A's result arrives | held, window to 12:01:20 | held (20 s < 60 s) |
+| 12:00:50 | child B's result arrives | held | held |
+| 12:01:00 | | | **one** turn reads A and B |
+| 12:01:20 | | **one** turn reads A and B | |
 
+- **Always passes:** a flush note, a `/now` prompt, and OpenCode's auto-compaction continuation (that is the running
+  turn going on, not a new wake).
+- **`/now <prompt>`** (TUI): sends the prompt past the wait; anything held rides along in the same turn. Bare
+  `/now` = flush. It sets a one-shot pass (`/pacer now`, 15 s) and then sends the prompt. While a turn runs, the
+  prompt steers into it anyway.
 - `batch me` (on in a new slot) makes your typed prompts wait too. `/pacer batch me off` lets them through at once.
 - `/pacer flush` sends what is held now.
 - Heartbeats and automations are just more held items.

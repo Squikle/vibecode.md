@@ -7,7 +7,7 @@ export const TTL_WARN = "may lose the cache if its TTL is 5 min"
 export const ttlWarning = (period) => (Number(period) > 240 ? TTL_WARN : "")
 
 // same rules as the server's validName (plugin/index.js)
-const KEYWORDS = new Set(["on", "off", "all", "status", "move", "week", "global", "batch", "me", "pace", "flush"])
+const KEYWORDS = new Set(["on", "off", "all", "status", "move", "week", "global", "batch", "me", "pace", "flush", "from", "now"])
 export const validName = (n) => /^[a-z0-9][a-z0-9_-]{0,31}$/.test(n) && !KEYWORDS.has(n)
 
 // available = the pacer data dir exists on this machine (not true for a TUI on a remote server)
@@ -43,7 +43,8 @@ export function headline(s, now) {
   return `pacer · 5h ${pct(p.usage?.h5?.pct)} · week ${pct(p.usage?.d7?.pct)} · ${p.mode ?? "?"} · lanes ≤${p.lanes ?? "?"} · ${ago(p.atMs, now)}`
 }
 
-export const flagsOf = (s) => [s?.pace && "pace", s?.batch && `batch ${s.period ?? 60}s`, s?.batch && s?.me === false && "me off"].filter(Boolean).join(" + ") || "-"
+// "from arrival" is the default and stays out of the short flags; "from reply" shows
+export const flagsOf = (s) => [s?.pace && "pace", s?.batch && `batch ${s.period ?? 60}s${s?.from === "reply" ? " from reply" : ""}`, s?.batch && s?.me === false && "me off"].filter(Boolean).join(" + ") || "-"
 
 const mark = (v) => (v === undefined ? "[?]" : v ? "[x]" : "[ ]")
 
@@ -55,18 +56,22 @@ export function rows({ available, tg, st, sid, now }) {
   const flag = (k) => (known ? !!cfg?.[k] : undefined)
   const here = !available ? "This session" : !known ? "This session (status unreadable)" : own ? `This session · slot ${own}` : "This session · not paced"
   const period = cfg?.period ?? 60
+  const reply = cfg?.from === "reply"
   const held = heldHere(st, sid, now)
   const out = [
     { value: "pace", title: `${mark(flag("pace"))} pace`, description: "usage line, mode pings for this slot", category: here },
-    { value: "batch", title: `${mark(flag("batch"))} batch`, description: `hold wakes, flush every ${period}s`, category: here },
+    { value: "batch", title: `${mark(flag("batch"))} batch`, description: reply ? `hold wakes until ${period}s after my last run` : `hold wakes, flush ${period}s after the first one`, category: here },
     { value: "period", title: `    period ${known ? `${period}s` : "?"}`, description: ttlWarning(period) || "pick 30 / 60 / 120 / 240 s (turns batch on)", category: here },
+    known && !cfg
+      ? { value: "from", title: "    from arrival", description: "needs a slot here first (pace or batch on)", category: here, disabled: true }
+      : { value: "from", title: `    from ${!known ? "?" : reply ? "reply" : "arrival"}`, description: !known ? "arrival: first wake opens the window · reply: counts from my last run" : reply ? "the period counts from my last run · Enter: from arrival" : "the first wake opens the window, later ones join · Enter: from reply", category: here },
     known && !cfg
       ? { value: "me", title: "[ ] batch me", description: "needs a slot here first (pace or batch on)", category: here, disabled: true }
       : { value: "me", title: `${mark(known ? cfg.me !== false : undefined)} batch me`, description: "your own prompts wait for the period too", category: here },
     { value: "week", title: `${mark(known ? !!tg.week : undefined)} week`, description: "count the weekly limit in every decision", category: "Account" },
     { value: "global", title: `${mark(known ? !!tg.global : undefined)} global`, description: "in HOLD/LIMITED stop sessions outside every paced slot", category: "Account" },
   ]
-  if (held && own) out.splice(4, 0, { value: "flush", title: "    flush now", description: `${held.n} held · ${held.when}`, category: here })
+  if (held && own) out.splice(out.findIndex((r) => r.value === "week"), 0, { value: "flush", title: "    flush now", description: `${held.n} held · ${held.when} · /now sends it too`, category: here })
   if (known) {
     const names = Object.keys(tg.slots)
     for (const n of names) {
@@ -105,6 +110,9 @@ export function rowAction(value, { tg, sid }) {
     case "me":
       if (!known) return both("batch me", "batch me on", "batch me off")
       return cfg ? { kind: "run", text: `batch me ${cfg.me !== false ? "off" : "on"}` } : { kind: "none", reason: "turn pace or batch on here first" }
+    case "from":
+      if (!known) return { kind: "choose", title: "batch from", options: [{ title: "arrival", value: "batch from arrival" }, { title: "reply", value: "batch from reply" }] }
+      return cfg ? { kind: "run", text: `batch from ${cfg.from === "reply" ? "arrival" : "reply"}` } : { kind: "none", reason: "turn pace or batch on here first" }
     case "week": case "global": return known ? { kind: "run", text: `${value} ${tg[value] ? "off" : "on"}` } : both(value, `${value} on`, `${value} off`)
     case "status": return { kind: "run", text: "status", close: true }
     case "flush": return { kind: "run", text: "flush", close: true }
@@ -156,6 +164,9 @@ export function replyToast(cmd, reply) {
   const variant = /\berror\b/i.test(text) ? "error" : /^usage:/i.test(text) ? "warning" : "success"
   return { message: text, variant }
 }
+
+// `/now <prompt>`: the prompt skips the batcher (anything held rides along); bare `/now` flushes what is held
+export const nowRoute = (input) => (String(input ?? "").trim() ? { kind: "prompt", text: String(input).trim() } : { kind: "flush" })
 
 // typed `/pacer <args>` goes to the server unchanged; bare `/pacer` (or the palette) opens the dialog
 export const slashRoute = (input) => (String(input ?? "").trim() ? { kind: "forward", text: String(input).trim() } : { kind: "open" })

@@ -88,7 +88,7 @@ function rpcCtx(loc) {
 test("RPC: the server registers `pacer` and no /pacer command; the period counts from the run's end; flush", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pacer-rpc-"))
   process.env.PACER_DATA = dir
-  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true } } }))
+  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true, from: "reply" } } }))
   try {
     const url = pathToFileURL(join(import.meta.dirname, "..", "..", "plugins", "pacer", "index.js")).href
     const m = (await import(url + "?copy=rpc")).default
@@ -143,10 +143,52 @@ test("RPC: the server registers `pacer` and no /pacer command; the period counts
   } finally { delete process.env.PACER_DATA; if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) }
 })
 
+test("arrival (default) through the live core: a lone prompt waits one window; /pacer now lets the next one pass, held ride along", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "pacer-arrival-"))
+  process.env.PACER_DATA = dir
+  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true } } }))
+  try {
+    const url = pathToFileURL(join(import.meta.dirname, "..", "..", "plugins", "pacer", "index.js")).href
+    const m = (await import(url + "?copy=arrival")).default
+    const c = rpcCtx("w1")
+    const dispose = await m.setup(c)
+    const call = (text) => c.rpcs[0].impl.command({ sessionID: "ses_A", text })
+    const state = () => JSON.parse(readFileSync(join(dir, "plugin-state.json"), "utf8")).rt.ses_A
+    const ev = (type) => ({ id: type + Math.random(), type, data: { sessionID: "ses_A" } })
+    const asst = { id: "a1", role: "assistant", content: "ok" }
+    // a fresh session (no run for ages): the first prompt is held for one window from its arrival
+    const t0 = Date.now()
+    await c.hooks[0]({ sessionID: "ses_A", messages: [{ id: "u1", role: "user", content: "a" }] })
+    assert.equal(c.calls.interrupt, 1, "held: arrival mode waits even after a long quiet")
+    await sleep(1200)
+    let s = state()
+    assert.deepEqual(s.held.ids, ["u1"]); assert.ok(s.due - t0 >= 59e3 && s.due - t0 <= 61e3, "due = arrival + 60 s")
+    assert.match((await call("status")).reply, /batch 60s from arrival/)
+    // /pacer now (the TUI's /now) then the prompt: it passes, and the held one rides along
+    assert.match((await call("now")).reply, /your next prompt passes; the 1 held ride along/)
+    await c.hooks[0]({ sessionID: "ses_A", messages: [{ id: "u1", role: "user", content: "a" }, { id: "u2", role: "user", content: "go" }] })
+    assert.equal(c.calls.interrupt, 1, "passed: no second hold")
+    await sleep(1200)
+    s = state()
+    assert.equal(s.held, null); assert.equal(s.skipUntil, null, "one-shot")
+    // the flag is gone: the next wake opens a new window
+    await c.hooks[0]({ sessionID: "ses_A", messages: [{ id: "u2", role: "user", content: "go" }, asst, { id: "u3", role: "user", content: "b" }] })
+    assert.equal(c.calls.interrupt, 2)
+    // while a turn runs, /pacer now sets no flag (the prompt steers into the turn)
+    c.push(ev("session.execution.started")); await sleep(30)
+    assert.match((await call("now")).reply, /a turn is running/)
+    assert.ok(!state().skipUntil)
+    // the mode flips to reply from the pop-up's row text
+    assert.match((await call("batch from reply")).reply, /from reply/)
+    assert.equal(JSON.parse(readFileSync(join(dir, "toggles.json"), "utf8")).slots.main.from, "reply")
+    dispose()
+  } finally { delete process.env.PACER_DATA; if (existsSync(dir)) rmSync(dir, { recursive: true, force: true }) }
+})
+
 test("restart: a batch held when OpenCode stopped flushes after it starts again, even if a turn was running", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pacer-restart-"))
   process.env.PACER_DATA = dir
-  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true } } }))
+  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true, from: "reply" } } }))
   // saved by another process (pid 1) mid-turn: busy, one item held, already due
   const now = Date.now()
   writeFileSync(join(dir, "plugin-state.json"), JSON.stringify({ pid: 1, rt: { ses_A: { lastRunStart: now - 90e3, lastRunEnd: now - 90e3, held: { ids: ["u2"], since: now - 80e3, kinds: { child: 1 } }, due: now - 20e3, busy: true, ran: true } } }))
@@ -167,7 +209,7 @@ test("restart: a batch held when OpenCode stopped flushes after it starts again,
 test("standby: while an older build's core is live, the new one holds nothing; it takes over with the state on disk", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pacer-standby-"))
   process.env.PACER_DATA = dir
-  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true } } }))
+  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true, from: "reply" } } }))
   const reg = (globalThis[Symbol.for("opencode.pacer.core")] ??= {})
   reg.oldbuild = { refs: 3, build: "oldbuild" } // a pre-standby build: no `born`
   try {
@@ -201,7 +243,7 @@ test("standby: while an older build's core is live, the new one holds nothing; i
 test("two fresh module copies (like OpenCode's per-location load) share ONE core: one hold per model call", async () => {
   const dir = mkdtempSync(join(tmpdir(), "pacer-core-"))
   process.env.PACER_DATA = dir
-  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true } } }))
+  writeFileSync(join(dir, "toggles.json"), JSON.stringify({ week: false, global: false, slots: { main: { sid: "ses_A", title: "A", pace: false, batch: true, period: 60, me: true, from: "reply" } } }))
   try {
     const url = pathToFileURL(join(import.meta.dirname, "..", "..", "plugins", "pacer", "index.js")).href
     const m1 = (await import(url + "?copy=1")).default, m2 = (await import(url + "?copy=2")).default

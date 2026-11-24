@@ -1,7 +1,7 @@
 // node --test tests/pacer/   (pure parts of the TUI: status -> rows, row -> /pacer text, TTL warning, slash routing)
 import test from "node:test"
 import assert from "node:assert/strict"
-import { parseStatus, headline, rows, rowAction, newSlotCommand, slashRoute, ttlWarning, TTL_WARN, PERIODS, ago, flagsOf, heldHere, footerText, replyToast } from "../../plugins/pacer/tui-core.js"
+import { parseStatus, headline, rows, rowAction, newSlotCommand, slashRoute, ttlWarning, TTL_WARN, PERIODS, ago, flagsOf, heldHere, footerText, replyToast, nowRoute } from "../../plugins/pacer/tui-core.js"
 import { parseArgs, applyOp, emptyToggles } from "../../plugins/pacer/index.js"
 
 const NOW = 1_800_000_000_000
@@ -78,6 +78,27 @@ test("rowAction: Enter -> the /pacer text that flips the row", () => {
   assert.equal(u.kind, "choose"); assert.deepEqual(u.options.map((o) => o.value), ["on", "pace off"])
 })
 
+test("from row: arrival by default, Enter flips it; needs a slot; flags show only the non-default reply", () => {
+  const rs = rows(S()), r = byVal(rs)
+  assert.equal(r.from.title, "    from arrival"); assert.match(r.from.description, /first wake opens the window.*Enter: from reply/)
+  assert.match(r.batch.description, /flush 300s after the first one/)
+  assert.equal(rs.indexOf(r.from), rs.indexOf(r.period) + 1, "right under period")
+  assert.deepEqual(rowAction("from", S()), { kind: "run", text: "batch from reply" })
+  const tr = { ...tg, slots: { ...tg.slots, main: { ...tg.slots.main, from: "reply" } } }
+  const sr = { ...S(), tg: tr }
+  assert.equal(byVal(rows(sr)).from.title, "    from reply"); assert.match(byVal(rows(sr)).batch.description, /until 300s after my last run/)
+  assert.deepEqual(rowAction("from", sr), { kind: "run", text: "batch from arrival" })
+  assert.equal(byVal(rows(S({ sid: "ses_Z" }))).from.disabled, true); assert.equal(rowAction("from", S({ sid: "ses_Z" })).kind, "none")
+  assert.deepEqual(rowAction("from", { tg: null, sid: "ses_A" }).options.map((o) => o.value), ["batch from arrival", "batch from reply"])
+  assert.equal(flagsOf(tg.slots.main), "pace + batch 300s + me off"); assert.equal(flagsOf(tr.slots.main), "pace + batch 300s from reply + me off")
+})
+
+test("/now: text = a prompt that skips the wait, bare = flush", () => {
+  assert.deepEqual(nowRoute("  fix it  "), { kind: "prompt", text: "fix it" })
+  assert.deepEqual(nowRoute(""), { kind: "flush" }); assert.deepEqual(nowRoute(undefined), { kind: "flush" })
+  assert.notEqual(parseArgs("now").op, "usage"); assert.notEqual(parseArgs("flush").op, "usage")
+})
+
 test("every command text the TUI can send parses on the server (no usage replies)", () => {
   const texts = new Set()
   for (const sv of [S(), S({ sid: "ses_Z" }), { tg: null, sid: "ses_A" }]) {
@@ -127,7 +148,7 @@ test("held here: footer timer text, and a `flush now` row only while this slot h
   assert.equal(footerText("", "ses_A", NOW, "{bad"), "")
   // the row: after `batch me`, Enter flushes and closes; absent with nothing held or no slot here
   const s = S({ st: held() }), rs = rows(s), r = byVal(rs)
-  assert.equal(r.flush.description, "2 held · flush in 23s"); assert.equal(rs.indexOf(r.flush), rs.indexOf(r.me) + 1)
+  assert.equal(r.flush.description, "2 held · flush in 23s · /now sends it too"); assert.equal(rs.indexOf(r.flush), rs.indexOf(r.me) + 1)
   assert.deepEqual(rowAction("flush", s), { kind: "run", text: "flush", close: true })
   assert.equal(byVal(rows(S())).flush, undefined)
   assert.equal(byVal(rows(S({ st: held(), sid: "ses_Z" }))).flush, undefined)
