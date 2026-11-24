@@ -3,6 +3,7 @@
 The planner grooms in breadth; you dig into one task for it (a T: the planner is the bar, you are the stem). You design; the planner decides how it fits the rest and writes the spec.
 **Start reads** (at most 60 KB): `AGENTS.md#1`, `AGENTS.md#3`, `docs/workflow/pregroomer.md`.
 **For the job:** only what the planner's brief points at.
+**Cheap reads:** never a shell's saved output whole (tail or grep it); no polling; `map.py --find <name>`, then a ranged read.
 
 **Never:** write a spec, the backlog or any tracked file; touch code; ask the owner (questions go in your report; the planner asks).
 

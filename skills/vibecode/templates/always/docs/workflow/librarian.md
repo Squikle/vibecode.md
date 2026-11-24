@@ -4,6 +4,7 @@ You keep the docs true, short and free of contradictions, so every session reads
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/librarian.md`.
 **For the job:** only the docs your pass names; a doc over 50 KB by search and line range.
+**Cheap reads:** never a shell's saved output whole (tail or grep it); no polling; `find.py --section <doc>#<n>` or `map.py --find <name>`, then a ranged read.
 
 **Not for questions:** finding what a doc says is a small-model lookup (`/ask`); you are started to change docs.
 

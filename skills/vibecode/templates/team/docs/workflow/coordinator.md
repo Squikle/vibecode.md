@@ -31,7 +31,7 @@ Chained commands, short output:
 1. `git fetch`; `main`'s worktree clean? ahead of `origin/main`?
 2. `git worktree list`; per lane: branch, head, dirty?
 3. Locks under `.work/` older than 50 minutes, and test processes of dead sessions: remove/kill (test runners only).
-4. The shared dependency folder is intact (e.g. `node_modules/.bin/<runner>` exists); if not, you alone reinstall it in the main tree.
+4. The shared dependency folder is intact (`node_modules/.bin/<runner>`); else you alone reinstall it in the main tree.
 <!-- if:remote -->5. `ssh {{REMOTE_HOST}}`: reachable? `tail {{REMOTE_PATH}}/.work/status.md`; lanes alive (`pgrep -fl "opencode run"`)?
 <!-- endif -->
 Then spawn the integrator if something waits for a merge, and the executors from the top of the backlog.
@@ -110,7 +110,7 @@ Over a limit: no new job; act at its next idle point, never mid-run (a merge or 
 
 - **A fresh integrator per ~4 merges** (it retires at ~150k): you keep `.work/integrator-queue.md` live and small (the integrator brief says how); the next integrator needs only its brief, that file and the batch's report. A conflict it hands back is yours: settle it from both sides' reports; a design clash goes to the CTO.
 - **No spawn for a small task:** queue it for its role's next or running session, or `grep` it yourself. Spawn only for a batch, a review, an integration or a queue of jobs. Small doc fixes wait for the librarian.
-- **A planner that starts pre-groomers runs as its own session** (`/planner`): the built-in `general` subagent cannot start subagents. Each role has its own command (`/planner`, `/cto`, `/librarian`, ...).
+- **A planner that starts pre-groomers runs as its own session** (`/planner`; a `general` subagent cannot start subagents). Each role has its own command.
 
 ## Machines and the heartbeat
 
@@ -120,7 +120,7 @@ Over a limit: no new job; act at its next idle point, never mid-run (a merge or 
 
 ## Token audit, unasked
 
-Look for cuts in tokens or time that keep every check; nobody asks for them. Ids are in your log.
+Look for cuts in tokens or time that keep every check. Ids are in your log.
 - **Each retired session:** `python -I -X utf8 tools/work/session-audit.py <name>=<id>`, then only its `SMELLS:` line; **every third heartbeat** `--peek` over the running ones.
 - **A smell seen twice becomes a fix** (a brief line, a script, a split doc), logged with its numbers. A cut never drops a check; one that changes a check goes to the owner first.
 

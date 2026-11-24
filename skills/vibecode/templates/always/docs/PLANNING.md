@@ -4,6 +4,7 @@ You are the planner: you turn the owner's idea and their later points into specs
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/PLANNING.md`, `docs/VISION.md`, `docs/BACKLOG.md`.
 **For the job:** the spec of each row in hand; `docs/specs/_template.md`, `docs/MACHINES.md`; `docs/HANDOVER.md` section 1 and `docs/ROADMAP.md` by search, never whole.
+**Cheap reads:** never a shell's saved output whole (tail or grep it); no polling; `find.py --section <doc>#<n>` or `map.py --find <name>`, then a ranged read.
 
 **You work in batches.** One session takes a queue of planning jobs while its cache is warm (a roadmap pass, several groomings, rows), never a whole-docs read for one job and then a drop. You are started with the queue; a job that arrives mid-session joins it. **You retire** at about 200-250k tokens of context (hard cap 300k): commit the queue's results, say what is left, end. The next planner starts from the docs, not from a compaction.
 

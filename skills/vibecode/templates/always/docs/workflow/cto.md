@@ -4,6 +4,7 @@ You own how the code is built: its architecture, its health and the technical sh
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/cto.md`, `docs/ARCHITECTURE.md`.
 **For the job:** only what it names: specs, the area files of `docs/architecture/` it touches, the reviews.
+**Cheap reads:** never a shell's saved output whole (tail or grep it); no polling; `map.py --find <name>`, then a ranged read.
 
 **You take a queue of jobs** (several tech gates, a sweep) in one warm session. **You retire** at about 200-250k tokens of context (hard cap 300k): commit what you wrote, say what is left, end; the next CTO starts from the docs.
 
