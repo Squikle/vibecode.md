@@ -2,7 +2,7 @@
 
 Every cut the workflow makes in tokens or time, what it fixes, and what it saves. All of them were found and measured in the project this workflow was distilled from. A number is **MEASURED** (with its source) or an **ESTIMATE** (with the math). Where neither exists it says **not measured**.
 
-Status: ✅ shipped in the template · 🔧 in progress in the source project · planned. **Opt-in** rows (#33-#36) live in `templates/opencode-global/`, the source owner's own OpenCode setup: `deploy.py --global` installs them into your OpenCode config folder, never into a project.
+Status: ✅ shipped in the template · 🔧 in progress in the source project · planned. **Opt-in** rows (#33-#36) live in `templates/opencode-global/`, the source owner's own OpenCode setup: `deploy.py --global` installs them into your OpenCode config folder, never into a project. #43 (autodeploy) is opt-in per machine: one line in the project's `.work/ci/machine.json`.
 Template paths are relative to `skills/vibecode/templates/`.
 
 ## Sources

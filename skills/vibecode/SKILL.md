@@ -90,5 +90,5 @@ Write the IDs as `provider/model#variant` (opencode's format for agents, command
 - **The planner prompt** in a code block: the one thing to paste now, into a new opencode session on the planner's model. Then the coordinator prompt (or, for solo, the builder prompt), to paste after the planner says the first batches are ready. Both are printed by `deploy.py` and kept in `docs/PROMPTS.md`.
 - The compaction advice (section 5) in 2-3 lines, with the alias names for their models.
 - Missing tools from the probe, and anything not verified, as ⚠️ lines.
-- One line on the opt-in kit for their own OpenCode (prompt-polish, ctxpick, the compaction snippet): `python -I -X utf8 <skill base>/scripts/deploy.py --global`. Never run it for them unasked.
+- One line on the opt-in kit for their own OpenCode (prompt-polish, ctxpick, the pacer, the compaction snippet): `python -I -X utf8 <skill base>/scripts/deploy.py --global`. Never run it for them unasked. If they have an app to keep running, one more: autodeploy is `"autodeploy": true` in `.work/ci/machine.json` (`tools/ci/README.md`).
 - Nothing else: no tour of the files.
