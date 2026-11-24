@@ -15,6 +15,8 @@
 //
 // Bypass for one message: start it with "!!"  (e.g. "!! leave this exactly as typed")
 // Disable entirely: set ENABLED = false below, or add "-prompt-polish" to "plugins" in opencode.jsonc.
+// Toggle at runtime: /polish in the TUI (tui.js) writes <data>/settings.json {polish, show}; this reads it per prompt.
+//   <data> = $PROMPT_POLISH_DATA or ~/.local/share/prompt-polish. No file / unreadable = ON. "show" is TUI-only.
 // SET UP: POLISH_MODEL = your cheapest cloud model (provider id, model id, optional variant, as in your config);
 // ONLY_PROVIDERS = the provider ids whose sessions it may polish (the cloud ones you already send prompts to).
 //
@@ -38,6 +40,17 @@ const CONTEXT_ASSISTANT_CHARS = 1500 // tail of the last assistant reply given t
 const CONTEXT_USER_CHARS = 600 // tail of the previous user message given as context
 const REPLY_IN_ORIGINAL_LANGUAGE = false // true: when translating, ask the main model to answer in your language
 const BYPASS_PREFIX = "!!"
+
+/** the /polish toggle; anything odd (no file, bad JSON, no key) = ON */
+async function polishOn() {
+  try {
+    const dir = process.env.PROMPT_POLISH_DATA || join(homedir(), ".local", "share", "prompt-polish")
+    const v = JSON.parse(await readFile(join(dir, "settings.json"), "utf8"))
+    return v?.polish !== false
+  } catch {
+    return true
+  }
+}
 
 const INSTRUCTIONS = `You are a prompt pre-processor. You do NOT answer or execute the request. You make the smallest edits needed so another AI model reads it correctly.
 
@@ -253,6 +266,9 @@ export default {
           }
           return
         }
+
+        // Turned off with /polish -> the prompt goes through exactly as typed.
+        if (!(await polishOn())) return
 
         // Slash commands / empty / structured (command templates, pasted docs) -> leave alone.
         if (trimmed === "" || trimmed.startsWith("/")) return

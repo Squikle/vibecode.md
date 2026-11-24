@@ -7,7 +7,7 @@ files), prints what to add to your configs, and **never edits `opencode.jsonc` o
 
 | Part | Goes to | Kind | What it saves |
 |---|---|---|---|
-| `plugins/prompt-polish/` | `plugins/prompt-polish/` | server plugin + TUI part (`/polish-show`), one folder, no `cli.json` line | misread prompts: a cheap model fixes typos and translates before the main model reads it |
+| `plugins/prompt-polish/` | `plugins/prompt-polish/` | server plugin + TUI part (`/polish` pop-up), one folder, no `cli.json` line | misread prompts: a cheap model fixes typos and translates before the main model reads it |
 | `tui-plugins/ctxpick/` | `tui-plugins/ctxpick/` (outside `plugins/`) | TUI plugin, listed in `cli.json` | context re-read every turn after a compaction |
 | `opencode.snippet.jsonc` | printed, you merge it | config | compaction at ~70% of a per-model `limit.input`, a small kept tail, lane aliases |
 | rtk | its own install | server plugin | ~58% of `git log`, ~46% of `git status` output |
@@ -20,16 +20,19 @@ files), prints what to add to your configs, and **never edits `opencode.jsonc` o
   structured text and subagent prompts are left alone; any error or timeout lets your text through untouched.
 - **Set it up first:** `POLISH_MODEL` (your cheapest cloud model) and `ONLY_PROVIDERS` (the providers whose sessions
   it may polish) at the top of `index.js`. A session on any other provider, local models included, is never sent.
-- One message as typed: start it with `!!`. Off: `ENABLED = false`, or `"-prompt-polish"` in `"plugins"`.
-- **polish-show (on by default):** the transcript already shows the text the model got (the TUI swaps your typed
-  copy for the stored message), but nothing marked it. Now, when the last prompt was changed, a block above the
-  input shows what changed (`✎ prompt-polish · 2 edits`, then `to → too`; a translation or a big rewrite shows
-  `sent as: …`) and any `[prompt-check, auto]` note. It clears on your next prompt; nothing shows when nothing
-  changed. **0 tokens:** it only reads `metadata.promptPolish.original` from the message the TUI already holds.
-- `/polish-show` toggles it (also `on`, `off`, `status`); the state is kept in
-  `~/.local/share/prompt-polish/show.json` (`$PROMPT_POLISH_DATA` overrides; no file = on). Errors go to `tui.log`
-  there and never stop the polisher.
-- One folder: `tui.js`, `polish-core.js`, `composer.jsx` load from beside `index.js`, so no `cli.json` line.
+- One message as typed: start it with `!!`. Off for good: `ENABLED = false`, or `"-prompt-polish"` in `"plugins"`.
+- **`/polish`** opens a pop-up with two toggles, **both on by default** (Enter flips the row, Esc closes):
+  - **polish**: the hook runs at all. Off = every prompt reaches the model exactly as typed, 0 polish calls.
+  - **show**: after a polished prompt, a toast shows your message as corrected, removed words struck through
+    (no edit count). The transcript already shows the corrected text: the TUI swaps your typed copy for the
+    stored message. **0 tokens:** it only reads `metadata.promptPolish.original` from the message the TUI holds.
+  - **show my last prompt**: the full colour diff (removed red and struck, added green) plus any
+    `[prompt-check, auto]` note.
+- Also `/polish on|off`, `/polish show on|off`, `/polish status`; `/polish-show` is an alias. The state lives in
+  `~/.local/share/prompt-polish/settings.json` (`$PROMPT_POLISH_DATA` overrides; no file = both on), and `index.js`
+  reads it per prompt. Colours inside the transcript message itself are not possible: the TUI draws a user
+  message as one plain text with no plugin hook. Errors go to `tui.log` there and never stop the polisher.
+- One folder: `tui.js`, `polish-core.js`, `diff.jsx` load from beside `index.js`, so no `cli.json` line.
   Restart the TUI after deploying. Tests stay in the kit (`tests/prompt-polish/`); `deploy.py --global` never copies them.
 
 ## ctxpick

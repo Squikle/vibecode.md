@@ -1,129 +1,120 @@
-// node --test tests/   (pure parts of polish-show: toggle file, command args, which message, word diff, view)
+// node --test tests/   (polish-core.js: settings, /polish routing, which message pops, diff, overlay text)
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
-  parseShow, serializeShow, commandRoute, stateText, latestPolish, wordDiff, hunks, splitNote, view, viewLines, blockFor, MAX_HUNKS,
+  DEFAULTS, parseSettings, serializeSettings, commandRoute, statusText, rows, dataDirFrom,
+  latestPolish, nextPop, tokens, wordDiff, splitNote, overlay, overlayText, toastText, strike, MAX_CHARS,
 } from "../../plugins/prompt-polish/polish-core.js"
 
-const ORIG = "Consider making it as another diagram if changing the original one would make it look to complex"
-const FINAL = "Consider making it another diagram if changing the original one would make it look too complex"
-const user = (text, pp, id = "msg_u") => ({ id, type: "user", text, ...(pp ? { metadata: { promptPolish: pp } } : {}) })
-const pp = (original, extra = {}) => ({ original, language: "en", issues: 0, followup: true, model: "x/haiku", ...extra })
+const ORIG = "is the readme ok? kinda merge optimizations with agents diagram, or make another one if changing it makes it look to complex"
+const FINAL = "Is the readme ok? Merge optimizations with the agents diagram, or make another one if changing it makes it look too complex"
+const user = (id, text, original, extra = {}) => ({ id, type: "user", text, metadata: original === undefined ? undefined : { promptPolish: { original, language: "en", ...extra } } })
 
-test("parseShow: default ON for missing / empty / bad / odd files", () => {
-  assert.equal(parseShow(undefined), true)
-  assert.equal(parseShow(""), true)
-  assert.equal(parseShow("{nope"), true)
-  assert.equal(parseShow('{"show":"no"}'), true)
-  assert.equal(parseShow('{"show":false}'), false)
-  assert.equal(parseShow('{"show":true}'), true)
-  assert.equal(parseShow(serializeShow(false, 0)), false)
-  assert.match(serializeShow(true, 0), /"updated":"1970-01-01T00:00:00.000Z"/)
+test("settings: no file / junk / missing keys = both ON; booleans respected", () => {
+  assert.deepEqual(DEFAULTS, { polish: true, show: true })
+  for (const raw of [undefined, "", "  ", "{", "null", "[]", '{"polish":"no"}']) assert.deepEqual(parseSettings(raw), { polish: true, show: true }, String(raw))
+  assert.deepEqual(parseSettings('{"polish":false}'), { polish: false, show: true })
+  assert.deepEqual(parseSettings('{"show":false}'), { polish: true, show: false }) // old v1 show.json shape still reads
+  const s = JSON.parse(serializeSettings({ polish: false, show: true }, 0))
+  assert.equal(s.polish, false); assert.equal(s.show, true); assert.equal(s.updated, "1970-01-01T00:00:00.000Z")
+  assert.match(dataDirFrom({}, "/h"), /[\\/]h[\\/]\.local[\\/]share[\\/]prompt-polish$/)
+  assert.equal(dataDirFrom({ PROMPT_POLISH_DATA: "/x" }, "/h"), "/x")
 })
 
-test("commandRoute: bare/toggle flips, on/off set, status reports, junk errors", () => {
-  assert.deepEqual(commandRoute("", true), { next: false })
-  assert.deepEqual(commandRoute(undefined, false), { next: true })
-  assert.deepEqual(commandRoute(" Toggle ", true), { next: false })
-  assert.deepEqual(commandRoute("on", false), { next: true })
-  assert.deepEqual(commandRoute("OFF", true), { next: false })
-  assert.deepEqual(commandRoute("status", true), { next: undefined })
-  assert.match(commandRoute("maybe", true).error, /use \/polish-show \[on\|off\|status\]/)
-  assert.match(stateText(true), /ON.*0 tokens/)
-  assert.match(stateText(false), /OFF.*still runs/)
+test("/polish routing: bare = pop-up; on/off = polisher; show on/off; status; junk = usage", () => {
+  const s = { polish: true, show: true }
+  assert.deepEqual(commandRoute("", s), { open: true })
+  assert.deepEqual(commandRoute("   ", s), { open: true })
+  assert.deepEqual(commandRoute("status", s), { status: true })
+  assert.deepEqual(commandRoute("off", s), { set: { polish: false } })
+  assert.deepEqual(commandRoute("ON", s), { set: { polish: true } })
+  assert.deepEqual(commandRoute("show off", s), { set: { show: false } })
+  assert.deepEqual(commandRoute("show", s), { set: { show: false } }) // bare key = toggle
+  assert.deepEqual(commandRoute("polish", { polish: false, show: true }), { set: { polish: true } })
+  assert.deepEqual(commandRoute("polish off", s), { set: { polish: false } })
+  for (const bad of ["bogus", "show maybe", "show on now", "off off"]) assert.ok(commandRoute(bad, s).error, bad)
 })
 
-test("latestPolish: only the latest user message, only when the polisher changed it", () => {
-  const polished = user(FINAL, pp(ORIG))
-  assert.equal(latestPolish([polished]).final, FINAL)
-  assert.equal(latestPolish([polished]).original, ORIG)
-  // assistant / synthetic messages after it don't hide it
-  assert.ok(latestPolish([polished, { type: "assistant", content: [] }, { type: "synthetic", text: "x" }]))
-  // the next prompt (not polished) clears it
-  assert.equal(latestPolish([polished, user("next one")]), null)
-  // no metadata, identical text, junk
-  assert.equal(latestPolish([user("plain")]), null)
-  assert.equal(latestPolish([user(ORIG, pp(ORIG))]), null)
-  assert.equal(latestPolish([user(FINAL, { original: 5 })]), null)
+test("status line and pop-up rows show both toggles; 'last' disabled when nothing polished", () => {
+  assert.equal(statusText({ polish: true, show: true }), "polish ON · show ON")
+  assert.match(statusText({ polish: false, show: true }), /polish OFF .*as typed/)
+  const r = rows({ polish: true, show: false }, null)
+  assert.deepEqual(r.map((x) => x.value), ["polish", "show", "last"])
+  assert.match(r[0].title, /^\[x\] polish/); assert.match(r[1].title, /^\[ \] show/)
+  assert.equal(r[2].disabled, true)
+  assert.equal(rows(DEFAULTS, { id: "m" })[2].disabled, undefined)
+})
+
+test("latestPolish: only the newest user message, only if polish changed it", () => {
   assert.equal(latestPolish(undefined), null)
-  assert.equal(latestPolish([]), null)
+  assert.equal(latestPolish([user("a", FINAL, ORIG), user("b", "plain")]), null) // newest wasn't polished
+  assert.equal(latestPolish([user("a", ORIG, ORIG)]), null) // unchanged
+  const p = latestPolish([user("a", "x"), user("b", FINAL, ORIG), { id: "c", type: "assistant" }])
+  assert.deepEqual(p, { id: "b", original: ORIG, final: FINAL, language: "en" })
 })
 
-test("wordDiff + hunks: small edits found with context", () => {
-  const d = wordDiff(ORIG, FINAL)
-  assert.deepEqual(d.filter((x) => x.op !== "eq"), [{ op: "del", w: "as" }, { op: "del", w: "to" }, { op: "ins", w: "too" }])
-  const hs = hunks(d)
-  assert.equal(hs.length, 2)
-  assert.deepEqual(hs[0], { before: "Consider making it", del: "as", ins: "", after: "another diagram if", cut: false })
-  assert.deepEqual(hs[1], { before: "make it look", del: "to", ins: "too", after: "complex", cut: true })
-  assert.deepEqual(wordDiff("a b", "a b").every((x) => x.op === "eq"), true)
-  assert.deepEqual(wordDiff("", "new words").map((x) => x.op), ["ins", "ins"])
+test("nextPop: first look at a session only records; a new polished id pops once", () => {
+  let seen = {}
+  let r = nextPop(seen, "s1", [user("a", FINAL, ORIG)])
+  assert.equal(r.pop, null) // old message, no overlay
+  r = nextPop(r.seen, "s1", [user("a", FINAL, ORIG)])
+  assert.equal(r.pop, null)
+  r = nextPop(r.seen, "s1", [user("a", FINAL, ORIG), user("b", "typed, not polished yet")])
+  assert.equal(r.pop, null) // optimistic entry before the hook finishes
+  r = nextPop(r.seen, "s1", [user("a", FINAL, ORIG), user("b", FINAL, ORIG)])
+  assert.equal(r.pop.id, "b")
+  r = nextPop(r.seen, "s1", [user("a", FINAL, ORIG), user("b", FINAL, ORIG)])
+  assert.equal(r.pop, null) // once
+  assert.equal(nextPop(r.seen, undefined, []).pop, null)
 })
 
-test("wordDiff: big inputs fall back to prefix/suffix only (no huge table)", () => {
-  const a = Array.from({ length: 3000 }, (_, i) => `a${i}`).join(" ")
-  const b = Array.from({ length: 3000 }, (_, i) => `b${i}`).join(" ")
-  const t0 = Date.now()
-  const d = wordDiff(`start ${a} end`, `start ${b} end`)
-  assert.ok(Date.now() - t0 < 2000)
-  assert.equal(d[0].op, "eq"); assert.equal(d.at(-1).op, "eq")
-  assert.equal(d.filter((x) => x.op === "del").length, 3000)
+test("tokens/wordDiff keep whitespace and mark only real changes", () => {
+  assert.deepEqual(tokens("  a  b\n\n\n\nc"), [{ w: "a", sp: "  " }, { w: "b", sp: "\n\n" }, { w: "c", sp: "" }])
+  const d = wordDiff("make it look to complex", "make it look too complex")
+  assert.deepEqual(d.map((x) => `${x.op}:${x.w}`), ["eq:make", "eq:it", "eq:look", "del:to", "ins:too", "eq:complex"])
+  assert.deepEqual(wordDiff("same", "same").map((x) => x.op), ["eq"])
 })
 
-test("splitNote: strips the [prompt-check, auto] note and the reply-language suffix", () => {
-  const note = "[prompt-check, auto] Possible conflict: X vs Y. Ask: which? — if it's real and context doesn't settle it, ask me before starting; otherwise ignore this."
-  assert.deepEqual(splitNote(`do X\n\n${note}`), { body: "do X", note })
-  assert.deepEqual(splitNote(`do X\n\n${note}\n\n(Reply in the language with ISO code "ru".)`), { body: "do X", note })
-  assert.deepEqual(splitNote("just text"), { body: "just text", note: null })
+test("splitNote pulls the [prompt-check, auto] note and the reply-language suffix off", () => {
+  const n = splitNote(`${FINAL}\n\n[prompt-check, auto] Possible conflict: x. Ask: y?\n\n(Reply in the language with ISO code "ru".)`)
+  assert.equal(n.body, FINAL)
+  assert.match(n.note, /^\[prompt-check, auto\] Possible conflict/)
+  assert.deepEqual(splitNote("plain"), { body: "plain", note: null })
 })
 
-test("view: edits mode marks changed words; text lines read well", () => {
-  const v = view(latestPolish([user(FINAL, pp(ORIG))]))
-  assert.equal(v.mode, "edits")
-  assert.equal(v.title, "✎ prompt-polish · 2 edits")
-  assert.deepEqual(viewLines(v), [
-    "✎ prompt-polish · 2 edits",
-    "  Consider making it as (removed) another diagram if…",
-    "  …make it look to → too complex…",
-  ])
-  assert.deepEqual(v.hunks[1].map((s) => s.k), ["ctx", "del", "arrow", "ins", "ctx"])
+test("overlay: corrected text with del/ins segments, no edit count in the title", () => {
+  const v = overlay({ original: ORIG, final: FINAL, language: "en" })
+  assert.equal(v.title, "✎ polished")
+  assert.doesNotMatch(v.title, /edit/)
+  const txt = overlayText(v)
+  assert.match(txt, /\[-to-\] \{\+too\+\}/)
+  assert.match(txt, /\[-kinda merge-\] \{\+Merge\+\}|\[-kinda-\] \[-merge-\] \{\+Merge\+\}/)
+  assert.ok(v.duration >= 6000 && v.duration <= 20000)
+  assert.equal(overlay({ original: "a  b", final: "a b" }), null) // whitespace only
+  assert.equal(overlay(null), null)
 })
 
-test("view: insertion-only edit shows +word", () => {
-  const v = view({ original: "merge optimizations with agents diagram", final: "merge optimizations with the agents diagram", language: "en" })
-  assert.deepEqual(viewLines(v).slice(1), ["  merge optimizations with +the agents diagram…"])
+test("overlay: translation / heavy rewrite shows the final text only; note kept", () => {
+  const v = overlay({ original: "привет как дела с проектом", final: "Hi, how is the project going?", language: "ru" })
+  assert.equal(v.title, "✎ polished · translated from ru")
+  assert.deepEqual(v.segs, [{ t: "Hi, how is the project going?", k: "eq" }])
+  const c = overlay({ original: ORIG, final: `${FINAL}\n\n[prompt-check, auto] Possible conflict: x.` })
+  assert.match(c.title, /conflict note/)
+  assert.equal(c.segs.at(-1).k, "note")
 })
 
-test("view: conflict note is shown, even when the body is unchanged", () => {
-  const note = "[prompt-check, auto] Possible conflict: wants both A and not A. Ask: A or not A? — if it's real and context doesn't settle it, ask me before starting; otherwise ignore this."
-  const v = view({ original: "do A and not A", final: `do A and not A\n\n${note}`, issues: 1 })
-  assert.equal(v.title, "✎ prompt-polish · conflict note added")
-  assert.equal(v.note, note)
-  assert.equal(viewLines(v).at(-1), `  ${note}`)
+test("long messages are shortened around unchanged runs, changes always kept", () => {
+  const filler = Array.from({ length: 200 }, (_, i) => `word${i}`).join(" ")
+  const v = overlay({ original: `${filler} teh end`, final: `${filler} the end` })
+  const txt = overlayText(v)
+  assert.ok(txt.length < MAX_CHARS + 50, String(txt.length))
+  assert.match(txt, /…/); assert.match(txt, /\[-teh-\] \{\+the\+\}/)
 })
 
-test("view: translation / big rewrite -> 'sent as' excerpt instead of hunks", () => {
-  const v = view({ original: "привет, почини тесты пожалуйста", final: "Hi, please fix the tests", language: "ru" })
-  assert.equal(v.mode, "rewrite")
-  assert.equal(v.title, "✎ prompt-polish · translated from ru")
-  assert.equal(v.excerpt, "Hi, please fix the tests")
-  const long = view({ original: "x", final: "word ".repeat(200), language: "en" })
-  assert.equal(long.excerpt.length, 280); assert.ok(long.excerpt.endsWith("…"))
-})
-
-test("view: many edits are capped, rest counted", () => {
-  const orig = Array.from({ length: 40 }, (_, i) => (i % 5 === 0 ? `typo${i}` : `w${i}`)).join(" ")
-  const fin = orig.replace(/typo(\d+)/g, "fixed$1")
-  const v = view({ original: orig, final: fin })
-  assert.equal(v.hunks.length, MAX_HUNKS)
-  assert.equal(v.more, 8 - MAX_HUNKS)
-  assert.match(viewLines(v).at(-1), /\+4 more \(full text in the message above\)/)
-})
-
-test("view: whitespace-only change renders nothing; blockFor honours the toggle", () => {
-  assert.equal(view({ original: "a  b", final: "a b" }), null)
-  assert.equal(view(null), null)
-  const msgs = [user(FINAL, pp(ORIG))]
-  assert.ok(blockFor(true, msgs))
-  assert.equal(blockFor(false, msgs), null)
+test("toastText: removed words struck with U+0336, added words plain, nothing else added", () => {
+  assert.equal(strike("to"), "t̶o̶")
+  assert.equal(strike("a b"), "a̶ b̶")
+  const t = toastText(overlay({ original: "make it look to complex", final: "make it look too complex" }))
+  assert.equal(t, "make it look t̶o̶ too complex")
+  assert.equal(toastText(null), "")
 })
