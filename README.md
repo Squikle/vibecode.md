@@ -152,13 +152,13 @@ flowchart TB
 | **Executor** | builds one batch (or a chain) in its own worktree, test-first, by a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition | top, medium (high when it needs thinking) |
 | **Reviewer** | reads the diff against the spec before the slow tests; on green fixes its own minors and runs the gate (`READY TO MERGE`); tags blockers and majors by cause and structure problems `[smell]` for the CTO; a delta review of docs or tools only runs on a mid model | top (mid for such a delta), high, fresh per review |
 | **Integrator** | short-lived (~4 merges or 150k context): merges reviewed batches from its brief, a queue file and the report, never the specs; runs the gate, ships (push, vault, redeploy after code merges; with autodeploy on the app follows `main` by itself), writes the roadmap's "What's new" and a doc size line | mid, high |
-| **Lookup helper** | `/ask`: finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line` | small, low |
+| **Lookup helper** | `/ask`: finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line`; up to 5 numbered questions in one call, each answered under its number | small, low |
 
 ## Commands
 
 Every role gets an opencode command in the new project, each setting its own model, so you can talk to any of them in a new session at any time:
 
-`/coordinator` · `/planner <what to groom>` · `/cto <job>` · `/librarian <pass>` · `/pregroom <task>` · `/reviewer <id> base head` · `/builder <batch>` (solo) · `/ask <question>`
+`/coordinator` · `/planner <what to groom>` · `/cto <job>` · `/librarian <pass>` · `/pregroom <task>` · `/reviewer <id> base head` · `/builder <batch>` (solo) · `/ask <question, or 1. .. 5. questions>`
 
 ## Keeping tokens low
 
