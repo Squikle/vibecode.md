@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The coordinator's heartbeat in at most 25 lines: `python -I -X utf8 tools/work/coord-beat.py [--parent ses_..]`.
 
-One call instead of five: the pacer's first line (`.work/pacer/pacer.py status`, skipped when missing), the latest
+One call instead of five: the pacer's usage line (`pacer.py status --json` from the opt-in kit, skipped when missing), the latest
 gate verdict per sha (`.work/ci/<sha8>.json` and `.only.json`, and a run folder with no verdict yet), the machine
 locks (`.work/<name>.lock` or `.lock.d`: holder and age), the coordinator's child sessions with how long each has
 been quiet (the opencode database read-only for the children; with no database, `opencode session list --format
@@ -52,12 +52,19 @@ def ago(ms_then: float, now_ms: float) -> str:
     return f"{m}m" if m < 120 else f"{m // 60}h" if m < 2880 else f"{m // 1440}d"
 
 
-def pacer(work: Path) -> list[str]:
-    script = work / "pacer" / "pacer.py"
+def pacer() -> list[str]:
+    """The pacer's usage line from `pacer.py status --json` (it writes nothing): `$PACER_PY` when set, else the
+    opt-in kit's install, `<config>/opencode/plugins/pacer/pacer.py`. No pacer: no line."""
+    conf = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "opencode" / "plugins" / "pacer"
+    script = Path(os.environ.get("PACER_PY") or conf / "pacer.py")
     if not script.is_file():
         return []
-    first = run([sys.executable, "-I", str(script), "status"], 30).strip().splitlines()[:1]
-    return first or ["PACE ? (pacer.py status printed nothing)"]
+    out = run([sys.executable, "-I", str(script), "status", "--json"], 30).strip().splitlines()
+    try:
+        d = json.loads(out[-1])
+    except (IndexError, ValueError):
+        d = {}
+    return [str(d["line"])[:200]] if d.get("ok") and d.get("line") else ["PACE ? (no usage reading: pacer.py failed or no valid token)"]
 
 
 def red_name(red) -> str:
@@ -200,7 +207,7 @@ def queue(path: Path) -> list[str]:
 
 
 def beat(work: Path, parent: str | None, now_ms: float, top=None, db=None) -> list[str]:
-    out = pacer(work) + gates(work / "ci", now_ms) + locks(work, now_ms)
+    out = pacer() + gates(work / "ci", now_ms) + locks(work, now_ms)
     out += sessions(parent, now_ms, top, db) + queue(work / "integrator-queue.md")
     return out[:MAX_LINES]
 
@@ -233,14 +240,20 @@ def selftest() -> int:
         con.executemany("insert into session_v2 values (?,?,?,?,?,?,?)", kids)
         con.commit()
         con.close()
+        fake = Path(tmp) / "fake_pacer.py"
+        fake.write_text('print(\'{"ok": true, "line": "PACE 12:00 | mode GO lanes<=5"}\')\n', encoding="utf-8")
         before = sorted((p, p.stat().st_mtime) for p in Path(tmp).rglob("*"))
         top = [{"id": "ses_boss", "title": "project coordinator", "updated": now}]
         os.environ.pop("OPENCODE_SESSION_ID", None)
+        os.environ["PACER_PY"] = str(Path(tmp) / "none.py")
         out = beat(work, None, now, top, db)
         flat = "\n".join(out)
+        os.environ["PACER_PY"] = str(fake)
+        paced = pacer()
         checks = {
             "at most 25 lines": len(out) <= MAX_LINES,
             "no pacer, no line": not flat.startswith("PACE"),
+            "pacer's usage line": paced == ["PACE 12:00 | mode GO lanes<=5"],
             "newest five gates": "gates (newest 5)" in flat and "00000003" in flat and "00000004" not in flat,
             "a running gate": "deadbeef RUNNING?" in flat,
             "a new red named": "00000000 NEW-RED" in flat and "a.spec.ts" in flat,
