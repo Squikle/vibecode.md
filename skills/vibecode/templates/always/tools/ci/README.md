@@ -38,7 +38,7 @@ The `bootstrap` batch fills each `cmd`. A part:
 | `paths` | globs (fnmatch, `*` crosses folders) of changed files that make it run; `["*"]` = always |
 | `junit` | glob of the JUnit XML it writes (relative to the export). Without it the part is one test: exit 0 or red |
 | `rerun` | the command for one red alone: `{id}`, `{name}`, `{classname}`, `{file}` from the report |
-| `files_cmd`, `match` | `--only` with files: a file matching `match` runs `files_cmd` with `{files}` |
+| `files_cmd`, `match` | `--only` with files: a file matching `match` runs `files_cmd` with `{files}`; `file:<line>` (one test by its line) matches as the file and is passed as given |
 | `timeout` | minutes; past it the part's process tree is killed and the part is ERROR |
 | `lock` | a machine lock name (the same `.work/<name>.lock` as `tools/work/lock.ps1` / `lock.sh`); waits up to `lock_minutes` |
 | `heavy` | BUSY instead of a run while a process in `busy.processes` runs (a game, a render, another benchmark) |

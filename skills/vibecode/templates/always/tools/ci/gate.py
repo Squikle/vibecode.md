@@ -18,6 +18,7 @@ import glob
 import json
 import os
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -119,7 +120,8 @@ def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only
                 files.setdefault(item, [])
                 continue
             item = item.replace("\\", "/")
-            owner = next((p for p in config["parts"] if p.get("files_cmd") and matches(item, p.get("match", []))), None)
+            bare = re.sub(r":\d+$", "", item)  # `tests/x.spec.ts:115` (one test by its line): match the file, pass as given
+            owner = next((p for p in config["parts"] if p.get("files_cmd") and matches(bare, p.get("match", []))), None)
             if not owner:
                 raise SystemExit(f"--only: not a part and no part's `match` takes this file: {item} "
                                  f"(parts: {', '.join(known)})")
