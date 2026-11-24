@@ -123,10 +123,12 @@ Every role gets an opencode command in the new project, each setting its own mod
 
 ## Keeping tokens low
 
-- **Cheapest tool first:** a script or `grep` (free) → a small-model lookup (`/ask`) → a larger model only for judgment.
-- **Doc budgets:** the docs every session reads at its start have a size budget (`AGENTS.md` 10 KB; handover, architecture and planning 30 KB each); each role file names its **start reads** (at most 60 KB in total) and `tools/work/check-docs.py` holds the lists and budgets; the integrator reports sizes after each merge and the librarian compacts what grows.
-- **Role sessions retire, they aren't compacted:** the planner and the CTO take a queue of jobs in one warm session (a cached read costs ~a tenth, so a warm resume beats a fresh start) and retire at ~200-250k context (hard cap 300k); the next one starts from the docs. A small task is queued to a running session or done inline, never a spawn. Reviewers and integrators stay fresh.
-- **T-shaped grooming:** pre-groomers dig with small contexts so the planner's stays wide and short.
+- **Read less:** doc budgets and start reads (`tools/work/check-docs.py`), a big file read whole once, outlines (`tools/work/map.py`) and `git grep` before reading code.
+- **Wait less:** long runs in the foreground, never polled (polling was 37% of integrator cache reads); a small live queue file.
+- **Carry less:** role sessions retire at ~200-250k, integrators after ~4 merges, reviewers fresh; lanes auto-compact early.
+- **Look for it:** the coordinator audits each retired session (`tools/work/session-audit.py`) and turns repeat smells into fixes.
+
+Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](OPTIMIZATIONS.md).
 
 ## What `/vibecode` does
 
@@ -135,7 +137,7 @@ Every role gets an opencode command in the new project, each setting its own mod
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, and scripts under `tools/work/` (integration, worktrees, test locks, remote runs, the docs budget check). Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, and scripts under `tools/work/` (integration, worktrees, test locks, remote runs, the docs budget check, a code outline, the session token audit). Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the planner prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the planner session plans the product.
