@@ -2,6 +2,7 @@
 
 Usage (from main's worktree): python -I -X utf8 tools/work/integrate.py <branch> <id> [<id> ...]
 
+- First checks each id's report and its row: a missing one stops with nothing merged.
 - git merge --no-ff --no-commit <branch>; on conflicts prints CONFLICTS LEFT and the files, exits 1.
   Resolve, `git add`, run again with the same arguments: it resumes.
 - Per id: drops its row from docs/BACKLOG.md (renumbers), moves docs/specs/<id>.md to done/,
@@ -25,6 +26,15 @@ def git(*a, check=True):
 top = pathlib.Path(git("rev-parse", "--show-toplevel").stdout.strip())
 common = pathlib.Path(git("rev-parse", "--path-format=absolute", "--git-common-dir").stdout.strip()).parent
 gitdir = pathlib.Path(git("rev-parse", "--path-format=absolute", "--git-dir").stdout.strip())
+
+# Each report and its row, checked before the merge starts: a row in backticks or a code fence matched nothing,
+# and the batch merged with no HANDOVER row.
+for i in ids:
+    rep = common / ".work" / i / "report.md"
+    if not rep.exists():
+        sys.exit(f"NO REPORT {rep}: nothing merged")
+    if not any(l.startswith(f"| `{i}` |") for l in rep.read_text(encoding="utf-8").splitlines()):
+        sys.exit(f'NO HANDOVER ROW in {rep}: a line starting "| `{i}` |" (not in backticks or a fence); nothing merged')
 
 if not (gitdir / "MERGE_HEAD").exists():
     r = git("merge", "--no-ff", "--no-commit", branch, check=False)
