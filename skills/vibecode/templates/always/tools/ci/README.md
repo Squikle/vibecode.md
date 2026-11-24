@@ -83,6 +83,7 @@ the test has been green for two full gates.
    ```
    Build once: `docker compose -f docker-compose.ci.yml --profile ci build ci`. Mark the parts `"docker": true`.
 3. A part that needs the host (a GPU, a real browser window, a perf suite on the reference machine) stays a host part.
+4. Optional, once per clone: `python -I tools/vault/hook.py install` (the vault rebuilds when `main` moves; `tools/vault/README.md`).
 
 **macOS:** run it as `python3 tools/ci/gate.py ...`. Over ssh, Docker Desktop's keychain can block `docker`: set
 `DOCKER_CONFIG` to a config without `credsStore` for those runs. Locks there are folders (`.work/<name>.lock.d`).
