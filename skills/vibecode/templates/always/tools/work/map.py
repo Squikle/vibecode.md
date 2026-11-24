@@ -6,16 +6,23 @@ or an interface's methods under it; read the lines you need after it.
 `python tools/work/map.py <folder>`: one line per source file under it (`.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.py`; tests, `node_modules` and
 caches left out): its line count and its exported names. The job of each file is in `docs/architecture/<area>.md`.
 
+`python tools/work/map.py --find <sym> [<sym>...]`: where each symbol is declared, searched from the current folder
+(tests included): `file:line  declaration`, a method as `(Class) ...`; `Class.method` narrows it. An unknown symbol
+prints `not found` with the names that hold it, and the exit code is 1. Use it instead of `git grep "function x"`.
+
 TypeScript and JavaScript are read by pattern (a declaration at the start of a line, a method at two spaces in a class or an
 interface), Python by `ast`. It prints to stdout and writes nothing; its output is never committed.
 """
 import ast
+import os
 import re
 import sys
 from pathlib import Path
 
 SOURCES = {".ts", ".tsx", ".js", ".jsx", ".mjs", ".py"}
 SKIPPED = {"node_modules", "dist", "__pycache__", ".venv", ".git", "e2e-results", "test-results"}
+FIND_SKIPPED = SKIPPED | {".work"}   # never `docs`: a name skips the folder at every depth
+SIGNATURE_CHARS = 200
 TOP = re.compile(r"^(export\s+)?(?:default\s+)?(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?"
                  r"(function\*?|class|interface|type|enum|const|let)\s+([A-Za-z_$][\w$]*)")
 MEMBER = re.compile(r"^  (?:(?:private|protected|public|readonly|static|async|abstract|override|get|set)\s+)*"
@@ -80,9 +87,64 @@ def folder_map(folder: Path) -> str:
     return "\n".join(rows)
 
 
+def sources(top: Path):
+    """Each source file under top, the skipped folders never entered (a junctioned `node_modules` is never walked)."""
+    for folder, dirs, files in os.walk(top):
+        dirs[:] = sorted(d for d in dirs if d not in FIND_SKIPPED)
+        for name in sorted(files):
+            if Path(name).suffix in SOURCES:
+                yield Path(folder, name)
+
+
+def signature(lines: list[str], at: int) -> str:
+    """The declaration at line `at` (1-based), joined over its lines until its brackets close, cut to SIGNATURE_CHARS."""
+    text, depth = "", 0
+    for line in lines[at - 1:at + 7]:
+        text = f"{text} {line.strip()}".strip()
+        depth += sum(line.count(c) for c in "([") - sum(line.count(c) for c in ")]")
+        if depth <= 0:
+            break
+    return text if len(text) <= SIGNATURE_CHARS else text[:SIGNATURE_CHARS - 1] + "ΓÇª"
+
+
+def find(symbols: list[str], top: Path) -> tuple[list[str], bool]:
+    """`file:line  declaration` for each symbol, in the order asked; a miss says so with the names that hold it."""
+    found: dict[str, list[str]] = {s: [] for s in symbols}
+    names: set[str] = set()
+    for path in sources(top):
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+            decls = py_outline(text) if path.suffix == ".py" else ts_outline(text)
+        except (SyntaxError, UnicodeDecodeError, ValueError):
+            continue
+        lines, owner = text.splitlines(), None
+        for line, depth, what, _ in decls:
+            name = what.split()[-1]
+            owner = name if depth == 0 else owner
+            names.add(name)
+            for s in symbols:
+                cls, _, member = s.rpartition(".")
+                if name == member and (not cls or (depth == 1 and cls == owner)):
+                    sig = signature(lines, line)
+                    found[s].append(f"{path.relative_to(top).as_posix()}:{line}  {f'({owner}) ' if depth else ''}{sig}")
+    out, missed = [], False
+    for s, rows in found.items():
+        if not rows:
+            missed = True
+            key = s.rpartition(".")[2].lower()
+            close = sorted((n for n in names if key in n.lower()), key=str.lower)[:8]
+            rows = [f"{s}: not found" + (f" (close: {', '.join(close)})" if close else "")]
+        out += rows
+    return out, missed
+
+
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--find"] and len(argv) > 1:
+        rows, missed = find(argv[1:], Path.cwd())
+        print("\n".join(rows))
+        return 1 if missed else 0
     if len(argv) != 1:
-        print(__doc__.strip().splitlines()[0], "\nusage: python tools/work/map.py <file|folder>", file=sys.stderr)
+        print(__doc__.strip().splitlines()[0], "\nusage: python tools/work/map.py <file|folder> | --find <sym>...", file=sys.stderr)
         return 2
     target = Path(argv[0])
     if not target.exists():
