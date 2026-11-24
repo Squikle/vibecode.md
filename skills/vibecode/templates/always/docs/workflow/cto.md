@@ -27,6 +27,7 @@ You own how the code is built: its architecture, its health and the technical sh
 - **Contracts:** data shapes and signatures that cross a layer, named in the product's words.
 - **Weak spots:** errors (what fails, what the user sees, nothing swallowed), logging (at boundaries, with ids, never in hot loops), security (inputs from files, users, agents and URLs validated; no shell strings from input; paths inside their root), performance (what runs per frame or per request).
 - **Tests:** which logic gets unit tests first, which one e2e file proves the wiring, which existing test becomes a parameter instead of a copy.
+- **Edges:** an edge of the spec's `Edges` line left open goes back to the planner by name; the spec is not `ready` until each is answered or `not this batch`.
 
 ## 3. Health sweep
 

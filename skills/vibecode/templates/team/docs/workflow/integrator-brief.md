@@ -5,6 +5,8 @@ You merge finished batch branches into `main`, check `main`, push it, and deploy
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/integrator-brief.md`.
 Read this brief from your own worktree (or `git show origin/main:docs/workflow/integrator-brief.md`), never the main checkout's. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. **Never the specs.**
 
+**Cheap reads:** each brief and big doc once, in one call. Never read a shell's saved output whole: tail it, grep `FAIL|ERROR` or rerun it filtered. No polling: wait for the background notice. A name: `python tools/work/map.py --find <name>`, then a ranged read.
+
 ## You are short-lived
 
 A held integrator re-sends every earlier merge on every turn (measured: one all-day integrator read 39M cached tokens, ~73k per call). So: you retire after about **4 merges or 150k context**, whichever comes first. Before you end, update `.work/integrator-queue.md`: per batch merged (id, pushed sha), what still waits, anything half-done. The next integrator starts from that file and this brief, nothing more.
@@ -19,11 +21,13 @@ A held integrator re-sends every earlier merge on every turn (measured: one all-
 ## A merge
 
 1. Only batches the review passed: the latest `review*.md` says `GREEN` or `GREEN WITH NOTES` and the reviewer answered `READY TO MERGE <id> head=<sha>` (or a batch with no review answered `DONE`); or the verdict is `CHANGES NEEDED` with the builder's answers and a later round that passed. Otherwise tell the coordinator and skip it.
-2. `python -I -X utf8 tools/work/integrate.py <branch> <id> [<id> ...]`: merges `--no-ff`, removes the ids' rows from `docs/BACKLOG.md`, adds their "Built so far" rows and report sections (`docs/reports/built.md`), numbers `NEW` decisions, moves specs to `done/`. On `CONFLICTS LEFT`: resolve (for the docs' tables keep both sides; for code keep both intents), `git add`, run it again with the same arguments. **Never union-merge a file with mixed line endings:** a union across CRLF and LF doubled a whole doc once. Check `git ls-files --eol <file>` first; resolve such a file by hand from one side's bytes. A conflict you cannot settle: stop and tell the coordinator.
-3. **Checks on `main`:** types and unit; API in full; <!-- if:e2e -->under the lock the e2e files of every area the merge's diff touches (`git diff --name-only <merge>^1 <merge>`; a shared test helper changed: the whole suite)<!-- endif --><!-- if:perf -->; the performance suite when the diff touches rendering, layout or a hot path<!-- endif -->. A red: run it alone. It may pass the merge only when `docs/QUESTIONS.md` lists it or it passes alone 2 of 2 and the builder noted it. Anything else: stop and tell the coordinator.
-4. `git fetch`; if `origin/main` moved, merge it (row tables: keep rows neither side built; renumber). Push `main`.
-5. **Redeploy the owner's app after each merge that changes code** (the command in `docs/HANDOVER.md` section 4); a docs-only merge needs none.
-6. `docs/ROADMAP.md`, by the rules at its end: the merged rows ✅ (number dropped), the other `[#n]` renumbered from `docs/BACKLOG.md`, a new dated "What's new" part (the merged batches, what they get, what to try, from their reports' "Try it"); commit, push.
+2. `python -I -X utf8 tools/work/integrate.py <branch> <id> [<id> ...]`: merges `--no-ff`, removes the ids' rows from `docs/BACKLOG.md`, adds their "Built so far" rows and report sections (`docs/reports/built.md`), numbers `NEW` decisions, moves specs to `done/`. On `CONFLICTS LEFT`: resolve, `git add`, run it again with the same arguments. Code keeps both intents; a docs table keeps both sides by hand. **A doc whose sides differ in line endings** (`git ls-files --eol <file>`): `python -I -X utf8 tools/work/eolmerge.py <file> <merge base> <branch>`, never a plain union (one across CRLF and LF once doubled a whole doc) and never for code; check its unique-line count. Then grep the tree for `<<<<<<<`/`>>>>>>>` and for a decision number used twice. A conflict you cannot settle: stop and tell the coordinator.
+3. `docs/ROADMAP.md`, by the rules at its end: the merged rows ✅ (number dropped), the other `[#n]` renumbered from `docs/BACKLOG.md`, a new dated "What's new" part (from the reports' "Try it"); commit. Ship refuses a batch whose row is open (`ROADMAP`).
+4. **The gate on the merge:** `python -I -X utf8 tools/ci/gate.py run <merge>` (foreground, long timeout). `BUSY`/`ERROR`: run it again later; `ERROR` twice: tell the coordinator. `NEW-RED`: run it alone (`--only`); a real red stops the merge: tell the coordinator.
+5. **Ship** on `GREEN`/`KNOWN-RED`: `gate.py ship <merge> --batch <id> --what ".." --try ".."` (`--dry-run` shows the steps). The main worktree must be at the gated sha (`FAIL tree`). It fetches, pushes fast-forward only, logs the merge in `docs/MERGES.md`, redeploys the owner's app for a code change, refreshes the vault. `MOVED`: merge `origin/main` there (row tables: keep rows neither side built; renumber) and gate again. `FAIL <step>`: that step's line, never a `reset`.
+6. **A docs or tools pass with no rows, report or `NEW` decision**, whose head already holds `origin/main`, skips steps 2 and 3: `gate.py run <head>`, `git merge --ff-only <head>` in the main worktree, `gate.py ship <head> ...`. An ff that refuses has changed nothing: stop, never `reset`.
+
+**One integrator on the main worktree at a time;** the coordinator starts the next only after the last retired. A chain of stacked batches merges as one, with one ship after both.
 
 ## Your own fixes
 
@@ -31,4 +35,4 @@ Minor fixes during a merge (a conflict, a size rule, a stale test) need no revie
 
 ## Answer
 
-After each push, at most 6 lines: what was merged, the pushed commit, the check numbers, any red let through and why, and one size line: the output of `python -I -X utf8 tools/work/check-docs.py` (a red queues the librarian) and the files over the size limit.
+After each push, at most 6 lines: what was merged, the `SHIP` line, the `GATE` line, any red let through and why (a `new-flaky=` in the SHIP line: list it in `tools/ci/known-reds.json`), and one size line: the output of `python -I -X utf8 tools/work/check-docs.py` (a red queues the librarian), the vault's `written/misses` from the SHIP line (misses queue the librarian), and the files over the size limit.

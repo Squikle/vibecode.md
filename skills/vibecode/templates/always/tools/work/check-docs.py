@@ -15,10 +15,12 @@ MAX_LISTED_KB = 50  # no listed file is bigger
 FILE_KB = {  # each file's own budget; a file that does not exist is skipped
     "AGENTS.md": 10, "docs/HANDOVER.md": 30, "docs/ARCHITECTURE.md": 30, "docs/PLANNING.md": 30,
     "docs/workflow/coordinator.md": 12, "docs/workflow/cto.md": 12, "docs/workflow/librarian.md": 12,
-    "docs/workflow/pregroomer.md": 12, "docs/workflow/lane-brief.md": 12, "docs/workflow/reviewer-brief.md": 12,
-    "docs/workflow/integrator-brief.md": 12,
+    "docs/workflow/pregroomer.md": 12, "docs/workflow/lane-brief.md": 6, "docs/workflow/lane-more.md": 12,
+    "docs/workflow/coordinator-more.md": 12,
+    "docs/workflow/reviewer-brief.md": 12, "docs/workflow/integrator-brief.md": 12,
 }
-SEARCHED = {"docs/DECISIONS.md", "docs/QUESTIONS.md", "docs/ROADMAP.md", "docs/MEASUREMENTS.md", "docs/MERGES.md"}  # searched, never read whole
+SEARCHED = {"docs/DECISIONS.md", "docs/QUESTIONS.md", "docs/ROADMAP.md", "docs/MEASUREMENTS.md", "docs/MERGES.md",
+            "docs/workflow/lane-more.md", "docs/workflow/coordinator-more.md"}  # searched or read by section, never whole
 LINE = re.compile(r"\*\*Start reads\*\* \(at most (\d+) KB\):(.*)")
 
 

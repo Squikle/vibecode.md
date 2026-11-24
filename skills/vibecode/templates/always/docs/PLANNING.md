@@ -22,7 +22,8 @@ You are the planner: you turn the owner's idea and their later points into specs
 ## A spec
 
 - **Small:** one session builds it (about 1 to 4 hours of agent work). Split anything bigger; a spike or a measurement may be its own batch.
-- **Testable:** "What must be true" is a numbered list; each rule can be checked by a test, a measurement or a look named in "Checks".
+- **Testable:** "What must be true" is a numbered list; each rule can be checked by a test, a measurement or a look named in "Checks". **A rule with no failing test doesn't ship:** a builder writes its test first and sees it red.
+- **Edges:** "What must be true" ends with the template's `Edges` line, each edge answered or `not this batch`, before the spec is `ready`; the CTO names an open one back to the planner.
 - **Grounded:** "What is there now" names files and lines (after `bootstrap`), measured where it matters, marked UNVERIFIED where it is a reading.
 - **Their words** go in "What it is for", quoted. Your additions are marked as yours.
 - **A bug spec starts with a reproduction** seen red, and says so in its Status line.
