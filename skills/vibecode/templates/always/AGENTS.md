@@ -59,6 +59,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Shared dependency folders** (a `node_modules` linked into worktrees, a shared venv): never install into them from a worktree. If one looks broken, stop and say so in one line; only the coordinator<!-- if:solo --> (or the builder, in the main tree)<!-- endif --> reinstalls.
 <!-- if:e2e -->- **Heavy tests run through the lock** (`tools/work/lock.ps1` / `lock.sh`): one run per machine at a time, short (only the files you need), always naming the test files.
 <!-- endif -->- **Non-ASCII text never goes through a shell pipe into a file:** use the file tools or a script file. Never pipe a script into `python -` or `node -` (it can hang on stdin): write the file, then run it. Python run with `-I` ignores `PYTHON*` variables: use `-X utf8`.
+- **One step, many calls:** each step re-sends the whole context, so independent calls share one step, and a sequence you can plan (look up then query, try then fall back, retry) is one script with its branches written in.
 - **With `rtk` on PATH,** prefix `git log` and `git status` (`rtk git status`; measured ~58% and ~46% less output). Not for `git diff`/`show`/`--stat`, scripts or pipes (~0-8%). Without it, the plain command.
 - **Keep each file's line endings;** never rewrite a whole file's endings in a commit. `.gitattributes` pins them (one ending per file type).
 - **Each brief has one tracked copy** in `docs/workflow/`; read it from your own worktree, never the main checkout's. Copies elsewhere go stale.

@@ -24,6 +24,8 @@ KINDS = [("wait/poll", r"wait-process|start-sleep|get-process|\bsleep \d|\bwait 
 WAIT = re.compile(r"start-sleep|\bsleep \d")
 # Greps: a smell only above ~1 per 3 turns; a bug hunt's targeted greps are normal (two audits: 55 and 58).
 BIG_CHARS, SAME_CMD, GREP_PER_TURN, LAST_CTX, AVG_CTX, POLLS, WIDE_GREPS = 15000, 3, 0.34, 150000, 120000, 3, 3
+# One call per step: a first cut from four sessions of the source project (58-96% one-call steps, rows of 13-39).
+ONE_CALL_MIN, ONE_CALL_SHARE, ONE_CALL_RUN = 20, 0.8, 10
 GIT_GREP = re.compile(r"\bgit\b[^|;]*\bgrep\b")
 # A grep that prints a whole definition (-A20 and up) where `tools/work/map.py` gives its line numbers.
 WIDE_GREP = re.compile(r"\bgrep\b[^|;]*-a\s*[2-9]\d|select-string[^|;]*-context\s+\d+\s*,\s*[2-9]\d")  # lowercased
@@ -79,8 +81,14 @@ def audit(name, o):
     low = [x.lower() for x in cmds]
     waits = sum(bool(WAIT.search(x)) for x in low)
     maps = sum("map.py" in x for x in low)
+    # Calls per step (AGENTS.md "One step, many calls"): `run` is the longest row of steps with one call each.
+    per = [sum(p.get("type") == "tool" for p in m.get("content", [])) for m in msgs]
+    steps = [c for c in per if c]; one = sum(c == 1 for c in steps); row = best = 0
+    for c in per:
+        row = row + 1 if c == 1 else 0; best = max(best, row)
     print(f"\n== {name} turns={n} ctxSum={tot/1e6:.2f}M out={out/1e3:.0f}k firstCtx={first/1e3:.0f}k "
-          f"lastCtx={last/1e3:.0f}k waits={waits} mapPy={maps}")
+          f"lastCtx={last/1e3:.0f}k waits={waits} mapPy={maps} toolSteps={len(steps)} "
+          f"oneCall={one / max(len(steps), 1):.0%} run={best}")
     for k, v in weight.most_common(9):
         print(f"  {k:12} calls={calls[k]:4} outChars={chars[k]/1e3:7.1f}k reRead~{v/1e6:5.2f}M")
     big.sort(reverse=True)
@@ -96,6 +104,8 @@ def audit(name, o):
            if c >= SAME_CMD][:3]
     sm += [f"lastCtx {last/1e3:.0f}k"] if last >= LAST_CTX else []
     sm += [f"avgCtx {tot/n/1e3:.0f}k"] if n and tot / n > AVG_CTX else []
+    sm += [f"1-call steps {one}/{len(steps)}, run {best} (script it?)"] if (
+        len(steps) >= ONE_CALL_MIN and one / len(steps) >= ONE_CALL_SHARE and best >= ONE_CALL_RUN) else []
     print("   SMELLS: " + ("; ".join(sm) or "none"))
     return n, tot, waits * tot / n if n else 0
 
