@@ -12,7 +12,7 @@ A held integrator re-sends every earlier merge on every turn (measured: one all-
 ## Places
 
 - `main` is checked out in its own worktree (the coordinator names it; default `../{{PROJECT}}-wt/main`). Every merge and check happens there; never check out `main` elsewhere.
-- Commands that wait long: detached with a log, waited on in slices.
+- **Long runs in the foreground, no polling** (`AGENTS.md` section 5): the checks, the e2e files and the deploy each in one call with a long `timeout`, the output cut to its tail; read it once. Waiting turns were the biggest share of an integrator's cost.
 
 ## A merge
 

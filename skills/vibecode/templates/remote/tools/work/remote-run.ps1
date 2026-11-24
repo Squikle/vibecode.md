@@ -1,5 +1,5 @@
 # Runs a command (usually e2e files) for this worktree's COMMITTED HEAD on the second machine, under that machine's lock.
-# Usage (start it detached, wait in slices):
+# Usage (in the foreground with a long tool timeout; read the log's tail once, no polling):
 #   pwsh -File tools/work/remote-run.ps1 -Id <batch> -Cmd "<bash: bring the stack up && run the named files>" [-Log .work/remote-<id>.log]
 # It pushes HEAD to the remote clone as refs/heads/remote/<id>, checks it out in <repo>-wt-remote-<id> there,
 # links the dependency folders listed in -Link to the clone's own, and runs -Cmd through tools/work/lock.sh e2e.

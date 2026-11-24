@@ -53,7 +53,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 
 ## 5. Machine rules (each one was paid for)
 
-- **Tool calls time out** (about a minute or two): run anything long detached, writing a log, and wait on it in slices. Read logs only through a filter (`Select-String`, `grep`) on failures and the summary.
+- **Long runs in the foreground, no polling:** a suite, a build or a stack start runs in the foreground with a long `timeout` (the default is a minute or two; opencode takes up to 2400000 ms), its output into a log or cut to its tail; read that once. Never a detached run waited on with `Wait-Process`/`Start-Sleep`/`sleep` loops: every wait turn re-sends your whole context (measured: 37% of an integrator's cached reads). If the tool moves a run to the background, work on or end the turn; it reports when done. Read logs only through a filter (`Select-String`, `grep`) on failures and the summary.
 - **Shared dependency folders** (a `node_modules` linked into worktrees, a shared venv): never install into them from a worktree. If one looks broken, stop and say so in one line; only the coordinator<!-- if:solo --> (or the builder, in the main tree)<!-- endif --> reinstalls.
 <!-- if:e2e -->- **Heavy tests run through the lock** (`tools/work/lock.ps1` / `lock.sh`): one run per machine at a time, short (only the files you need), always naming the test files.
 <!-- endif -->- **Non-ASCII text never goes through a shell pipe into a file:** use the file tools or a script file. Never pipe a script into `python -` or `node -` (it can hang on stdin): write the file, then run it. Python run with `-I` ignores `PYTHON*` variables: use `-X utf8`.

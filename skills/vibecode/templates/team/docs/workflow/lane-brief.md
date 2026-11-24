@@ -14,7 +14,7 @@ A spec's `## How to build` (the CTO's) is followed; a deviation is one line in t
 - Your first branch is checked out. Each later batch of your queue: `git checkout -b <next-id>` from the branch you just finished (a lane's batches build on each other), unless the coordinator names another base.
 - Never check out, merge into or push `main`. Never `git pull`/`push`. `git fetch` is fine.
 - Shared dependency folders are links to the main tree's: **never install into them** (`npm ci`, `npm install`, `pip install` into the shared venv). A batch that needs a new dependency: build the rest, skip that part, say so. If one looks broken, stop and tell the coordinator in one line.
-- Commands that wait long: start them detached with a log, then wait in slices of at most 8 minutes. Read logs only through a filter.
+- **Long runs in the foreground** with a long `timeout` (`AGENTS.md` section 5): output into a log; read only the summary and the failures through a filter. No background runs, no `Wait-Process`/`Start-Sleep` polling.
 <!-- if:e2e -->- **Every e2e or stack command runs under the lock:** `pwsh -File tools/work/lock.ps1 -Name e2e -Who <id> -Cmd "<bring the stack up from this tree>; <runner> <named files>"`. Always name the files (a runner given no files runs everything). Keep each locked run short.
 <!-- endif --><!-- if:remote -->- **e2e files run on machine B by default:** `pwsh -File tools/work/remote-run.ps1 -Id <id> -Cmd "<bash: stack up; runner named files>"` tests your **committed** HEAD there. <!-- if:perf -->Performance runs stay on machine A. <!-- endif -->A red seen only on B (fonts, keys, timing): rerun it alone on A before you call it yours. If B's lock is held for over 10 minutes, use A's.
 <!-- endif -->
