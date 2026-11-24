@@ -1,0 +1,17 @@
+{
+ "_doc": "The gate's parts (tools/ci/README.md). The bootstrap batch fills in each empty cmd; a part with no cmd is an ERROR.",
+ "base": "origin/main",
+ "lock_minutes": 50,
+ "setup": "",
+ "docs_only": ["docs/*", "*.md"],
+ "parts": [
+  {"name": "types", "cmd": "", "paths": ["*"], "timeout": 10},
+  {"name": "unit", "cmd": "", "paths": ["*"], "junit": ".work/junit/unit*.xml", "timeout": 20}<!-- if:e2e -->,
+  {"name": "e2e", "cmd": "", "paths": ["*"], "junit": ".work/junit/e2e*.xml", "lock": "e2e", "timeout": 60}<!-- endif --><!-- if:perf -->,
+  {"name": "perf", "cmd": "", "paths": ["*"], "lock": "e2e", "heavy": true, "timeout": 30}<!-- endif -->
+ ],
+ "busy": {"processes": []},
+ "docker": {"compose": "docker-compose.ci.yml", "service": "ci"},
+ "remote": null,
+ "ship": {"deploy": "", "health": ""}
+}

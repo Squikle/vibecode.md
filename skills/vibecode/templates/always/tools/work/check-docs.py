@@ -18,7 +18,7 @@ FILE_KB = {  # each file's own budget; a file that does not exist is skipped
     "docs/workflow/pregroomer.md": 12, "docs/workflow/lane-brief.md": 12, "docs/workflow/reviewer-brief.md": 12,
     "docs/workflow/integrator-brief.md": 12,
 }
-SEARCHED = {"docs/DECISIONS.md", "docs/QUESTIONS.md", "docs/ROADMAP.md", "docs/MEASUREMENTS.md"}  # searched, never read whole
+SEARCHED = {"docs/DECISIONS.md", "docs/QUESTIONS.md", "docs/ROADMAP.md", "docs/MEASUREMENTS.md", "docs/MERGES.md"}  # searched, never read whole
 LINE = re.compile(r"\*\*Start reads\*\* \(at most (\d+) KB\):(.*)")
 
 

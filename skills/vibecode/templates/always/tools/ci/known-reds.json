@@ -1,0 +1,5 @@
+{
+ "_doc": "Reds the gate lets through (tools/ci/README.md). Each entry also has its docs/QUESTIONS.md row. kind: red (fails every run) or flake (green alone 3 of 3 needed). test: the JUnit id <classname>::<name>, or with title: the file or classname plus a part of the test name (survives a moved line).",
+ "reds": [
+ ]
+}
