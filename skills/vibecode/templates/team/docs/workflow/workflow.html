@@ -26,7 +26,7 @@
 </header>
 <nav>
   <a href="#roles">1. Who starts whom</a><a href="#big">2. A big task</a><a href="#t">3. T-shaped grooming</a>
-  <a href="#loop">4. The batch loop</a><a href="#stage">5. Clean stages</a><a href="#models">6. Models and efforts</a>
+  <a href="#loop">4. The batch loop</a><a href="#stage">5. Clean stages</a><a href="#machinery">6. The machinery</a><a href="#models">7. Models and efforts</a>
 </nav>
 <main>
 <section id="roles">
@@ -116,8 +116,37 @@ flowchart LR
   D --> Z[features again]
   </pre>
 </section>
+<section id="machinery">
+  <h2>6. The machinery around the agents</h2>
+  <p>The scripts between the sessions. Every one saves model calls or context: one script call instead of many reads, a merge with no model at all. Opt-in parts are off until turned on: the pacer, prompt-polish and ctxpick live in your OpenCode config (<code>deploy.py --global</code> of the vibecode skill), autodeploy is <code>"autodeploy": true</code> in <code>.work/ci/machine.json</code> (<code>tools/ci/README.md</code>). The pacer is a gate in front of the coordinator: whatever would wake it waits one period and goes in as one call.</p>
+  <pre class="mermaid">
+flowchart TB
+  M((Owner)) -->|types| PP["prompt-polish · opt-in<br/>typos, English, contradictions"]
+  W["children's reports,<br/>shell results, heartbeats"] --> PG
+  PP --> PG(["pacer gate · opt-in<br/>wakes wait one period, then one call; /now skips"])
+  PG --> C[Coordinator]
+  CB["tools/work/coord-beat.py<br/>one heartbeat call, not ~6 reads"] --> C
+  C --> E[Executors]
+  E -->|READY FOR REVIEW| R[Reviewer<br/>reads its review pack first]
+  R -->|READY TO MERGE| I[Integrator]
+  I --> G["tools/ci/gate.py run, in Docker<br/>one JSON verdict, known reds"]
+  G -->|GREEN or KNOWN-RED| S["gate.py ship<br/>log, push, vault, deploy: no model call"]
+  S --> HK["git hook on main"]
+  HK --> V["tools/vault: docs vault, no model"]
+  HK --> AD["tools/ci/autodeploy.py · opt-in<br/>the app follows main"]
+  S -. "waits for it" .-> AD
+  AD --> APP[(running app)]
+  subgraph ALL["in every session"]
+    direction TB
+    RT["rtk on git log / status"]
+    CP["early auto-compaction"]
+    X["ctxpick · opt-in<br/>then tick what stays"]
+    CP --> X
+  end
+  </pre>
+</section>
 <section id="models">
-  <h2>6. Models and efforts</h2>
+  <h2>7. Models and efforts</h2>
   <table>
     <tr><th>Role</th><th>Model</th><th>Reads at start</th></tr>
     <tr><td>Coordinator</td><td><code>{{M_COORD}}</code></td><td><code>AGENTS.md</code>, <code>docs/workflow/coordinator.md</code>, its log</td></tr>

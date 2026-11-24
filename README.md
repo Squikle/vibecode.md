@@ -2,7 +2,7 @@
 
 An opencode skill and command that set up a fresh project folder for a **multi-agent build**: you talk to one coordinator; a planner decides what to build, a CTO decides how, executors build it in worktrees, reviewers judge it before the slow tests, an integrator merges it, and a librarian keeps the docs short. Each runs in its own session, on the model that fits its job.
 
-- [How it works](#how-it-works): the diagrams
+- [How it works](#how-it-works): the diagrams, from [who starts whom](#1-who-starts-whom) to [the machinery around the agents](#6-the-machinery-around-the-agents) (CI, deploy, pacer, plugins and what each saves)
 - [The roles](#the-roles) · [Commands](#commands) · [Keeping tokens low](#keeping-tokens-low)
 - [What `/vibecode` does](#what-vibecode-does) · [Install](#install) · [Usage](#usage) · [Template flags](#template-flags) · [Layout](#layout)
 
@@ -10,7 +10,7 @@ An opencode skill and command that set up a fresh project folder for a **multi-a
 
 ### 1. Who starts whom
 
-The owner starts two sessions: the coordinator (the entry point) and, to plan, the planner. Everything else is started by them. Any session may hand a cheap lookup to a small model.
+The owner starts two sessions: the coordinator (the entry point) and, to plan, the planner. Everything else is started by them. Any session may hand a cheap lookup to a small model. What sits between them (CI, deploy, the pacer's gate in front of the coordinator): [diagram 6](#6-the-machinery-around-the-agents).
 
 ```mermaid
 flowchart LR
@@ -101,6 +101,45 @@ flowchart LR
   D --> Z[features again]
 ```
 
+### 6. The machinery around the agents
+
+The scripts and plugins between the sessions, and what each one saves. "row N" = that row in [OPTIMIZATIONS.md](OPTIMIZATIONS.md); **MEAS** = measured in the source project, **EST** = an estimate. Opt-in = off until you turn it on: the pacer, prompt-polish and ctxpick come with `deploy.py --global`, autodeploy with one line in `.work/ci/machine.json`. The pacer is a gate in front of the coordinator: everything that would wake it (the owner's prompt, a child's report, a shell result, a heartbeat) waits for one period and goes in as one model call.
+
+```mermaid
+flowchart TB
+  M((Owner)) -->|types| PP["prompt-polish · opt-in · row 34<br/>typos, English, contradictions"]
+  W["children's reports,<br/>shell results, heartbeats"] --> PG
+  PP --> PG{{"pacer gate · opt-in · row 33<br/>wakes wait one period, then one call; /now skips<br/>~100-170k per held wake (EST)"}}
+  PG --> C[Coordinator]
+  CB["coord-beat.py · row 32<br/>one heartbeat call, not ~6 reads"] --> C
+  C --> E[Executors]
+  E -->|READY FOR REVIEW| RP["review-pack.py · row 26<br/>-35% ctxSum per review (MEAS)"]
+  RP --> R[Reviewer]
+  R -->|READY TO MERGE| I[Integrator]
+  I --> G["gate.py run, in Docker · rows 2, 23, 27<br/>one JSON verdict, known reds · ~1.1M per merge (EST)"]
+  G -->|GREEN or KNOWN-RED| S["gate.py ship · row 2<br/>log, push, vault, deploy: no LLM"]
+  S --> HK["git hook on main"]
+  HK --> V["vaultify · row 28<br/>docs vault, 0 LLM"]
+  HK --> AD["autodeploy · opt-in · row 43<br/>~170-240k per merge outside ship (EST)"]
+  S -. "waits for it" .-> AD
+  AD --> APP[(running app)]
+  subgraph ALL["in every session"]
+    direction TB
+    RT["rtk · row 10<br/>git log -58%, status -46% (MEAS)"]
+    CP["early auto-compaction · rows 17, 36<br/>-38% cache reads (MEAS)"]
+    X["ctxpick · opt-in · row 35<br/>then tick what stays (EST)"]
+    CP --> X
+  end
+```
+
+| Piece | Where it lives | Row |
+|---|---|---|
+| prompt-polish, pacer, ctxpick | `templates/opencode-global/` (your OpenCode config, not the project) | 34, 33, 35 |
+| coord-beat, review-pack | `tools/work/` | 32, 26 |
+| gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
+| vaultify and its git hook | `tools/vault/` | 28 |
+| rtk, compaction config | `AGENTS.md`; the compaction snippet from `deploy.py --global` | 10, 17, 36 |
+
 ## The roles
 
 | Role | Does | Model (picked at setup) |
@@ -112,7 +151,7 @@ flowchart LR
 | **Librarian** | docs only: contradictions, compacted decisions, stale data removed, doc size budgets so every session reads less | mid, high |
 | **Executor** | builds one batch (or a chain) in its own worktree, test-first, by a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition | top, medium (high when it needs thinking) |
 | **Reviewer** | reads the diff against the spec before the slow tests; on green fixes its own minors and runs the gate (`READY TO MERGE`); tags blockers and majors by cause and structure problems `[smell]` for the CTO; a delta review of docs or tools only runs on a mid model | top (mid for such a delta), high, fresh per review |
-| **Integrator** | short-lived (~4 merges or 150k context): merges reviewed batches from its brief, a queue file and the report, never the specs; runs the gate, pushes, redeploys after code merges, writes the roadmap's "What's new" and a doc size line | mid, high |
+| **Integrator** | short-lived (~4 merges or 150k context): merges reviewed batches from its brief, a queue file and the report, never the specs; runs the gate, ships (push, vault, redeploy after code merges; with autodeploy on the app follows `main` by itself), writes the roadmap's "What's new" and a doc size line | mid, high |
 | **Lookup helper** | `/ask`: finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line` | small, low |
 
 ## Commands
@@ -126,6 +165,7 @@ Every role gets an opencode command in the new project, each setting its own mod
 - **Read less:** doc budgets and start reads (`tools/work/check-docs.py`), a big file read whole once, outlines (`tools/work/map.py`) and `git grep` before reading code.
 - **Wait less:** long runs in the foreground, never polled (polling was 37% of integrator cache reads); a small live queue file.
 - **Carry less:** role sessions retire at ~200-250k, integrators after ~4 merges, reviewers fresh; lanes auto-compact early.
+- **Wake less** (opt-in): the pacer holds the coordinator's wake-ups for one period and sends them as one model call.
 - **Look for it:** the coordinator audits each retired session (`tools/work/session-audit.py`) and turns repeat smells into fixes.
 
 Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](OPTIMIZATIONS.md).
@@ -137,7 +177,7 @@ Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](O
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate under `tools/ci/` and the docs vault under `tools/vault/`. Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/`. Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the planner prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the planner session plans the product.
