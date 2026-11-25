@@ -26,3 +26,50 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 ## 4. Clean stages
 
 No new feature lanes → CTO health sweep → the planner orders the refactor rows (🔴 first) → executors build them (no behaviour change) → librarian pass → features again. The integrator's size line tells you when a doc is over budget (queue the librarian) or a file is over its limit (the CTO).
+
+## 5. The checkpoint and the handover
+
+- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions with role, batch and id; machines; next moves), rewritten at every checkpoint. One-line events still go to your log. **Where it and these docs disagree, it wins** until a librarian pass folds it in.
+- **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, ask the owner for `/pacer on` in this session, adopt the running children, carry on with the next moves." When the owner asks for that prompt, show it; they start the session.
+- **The old coordinator goes idle first:** two coordinators both spawn.
+- **Adopt the children:** a background result goes to the session that spawned it. Send each running child one line with your session id ("report to me from now on; carry on"). Until you have children of your own, run `coord-beat.py --parent <old id>`.
+
+## 6. Talking to the owner
+
+- **Name sessions by role and batch** ("the `<id>` reviewer"), never by an internal code name.
+- **What waits on them:** the question tool, **one call for all items**, your pick first and marked "(Recommended)". Never a list in the reply they must answer by typing.
+- **📌 lines** (the opt-in todo plugin reads them; plain text otherwise): one per item at a line start, `📌 [<tag>] <kind>: <text>`, kind `waits on you`, `bug` or `news`, text ≤ ~80 characters (the details go in the reply). The same tag updates it; never in a code fence; tag `a-z0-9._-`, ≤ 40. Only waits count as open; bugs and news are FYI. `📌 [<tag>] done` closes one.
+- **The walk** (they press ctrl+s in `/todo`: "walk me through"): one question-tool call, one question per open wait plus one multi-select for the FYI rows to check off; then one `📌 [<tag>] done` per item their answers settled.
+- **A prompt they ask for:** show it; spawn it only if they ask.
+- **Their bug report:** a failing test first, then the fix; never reproduce on their own running app.
+- **Ask before going beyond the ask** in config, and before anything outward (a push outside the loop, an issue, a public place). `gate.py ship` pushing `main` is part of the loop.
+- Otherwise unattended: what they delegated keeps moving without them.
+
+## 7. Cost
+
+- **One step, many calls:** independent calls go in one step; a sequence you can plan is one script with its branches written in. Every step re-sends your whole context.
+- **Lookups:** a grep when it is cheaper than a helper; else **one** `{{M_HELPER}}` helper takes all the questions at once (n questions, one cold start), spawned in a step with your other calls. A cheap helper for a non-critical question is fine.
+- **No change for its own sake:** weigh a change, or say in a line why the current setup is already the best.
+- **Small doc and data fixes you do yourself** (a status line, a count, a typo); this overrides "small doc fixes wait for the librarian". Read code only to route (which files, "Same files as").
+- **Fill every property that is cheap to fill:** links, the `--from` cause, `From:` lines. A missing one costs a lookup later.
+- **Briefs pass paths, not copies:** `docs/workflow/lane-brief.md` (`lane-more.md` by section), `reviewer-brief.md`, `integrator-brief.md`.
+- **Your reads:** never grep `.work` wide, name the file; a shell's `.out` by tail or a `FAIL|ERROR` grep; the role docs once per session, then pointers.
+- **Audits unasked**, and verify a smell against the session itself (`session-audit.py`) before fixing it. Tools: `tokens-since.py` (what was spent since a time), `cache-ttl.py` (how long the cache stayed warm), `union.py` (merge two lists or ledgers line-wise).
+
+## 8. Pace
+
+- **Lane cap = the pacer's mode** when it is on (`/pacer`; the kit's `opencode-global/pacer.md`): BURST ≤ 7, GO ≤ 5, EASE ≤ 3, SLOW ≤ 2, HOLD and LIMITED none new; never over {{EXECUTORS}}. Helpers, the planner, the CTO and the librarian don't count.
+- **On a `[pacer ...] MODE ...` line:** answer in 2 lines and spawn within the new cap.
+- **Keep-alive** every 50-55 minutes for a child waiting idle (`#1`): past ~60 minutes it is cold.
+- **Heartbeat** (`#3`); **every third beat** a peek sweep: `session-audit.py --peek` (one line per running child).
+- **One integrator at a time, in the main worktree**; parallel lanes whenever nothing blocks.
+
+## 9. Gate and merge, the fine print
+
+- **Who runs which gate:** the executor runs the full `gate.py run <head> --base <base>`; a reviewer reruns only what its fixes touched (`--only <file>[:line] ...`). Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
+- **Stacks and locks:** `--config <json>` picks a machine set; each set has its own lock name. **No cancel:** kill only your own test tree and free only your own lock.
+- **Stacked merges ship under one full gate** (`#2`). **Mixed line endings** merge only through `tools/work/eolmerge.py`.
+- **Every merge names its cause:** `merge-log.py --from '<why>'` (single quotes), else it refuses with `NO CAUSE`; `cause.py` checks one. A batch with no spec carries a `From:` line in its report (the owner's word with a date, or the parent batch).
+- **Integrators** stamp times from the real clock (`Get-Date` / `date`), never a guess.
+- **PowerShell traps:** `"${w}:"` before a colon; `git push` writes to stderr, so check `$LASTEXITCODE`; `.Substring` throws on a short string; Python as `python -I -X utf8`; LF files via `[IO.File]::WriteAllText(p, s, [Text.UTF8Encoding]::new($false))`.
+- **OpenCode:** its database is read-only to you; never restart or re-point the server (it is the TUI's child); plugins reload by themselves, config loads at start.

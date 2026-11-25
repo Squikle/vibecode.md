@@ -27,7 +27,7 @@ The details behind `docs/workflow/lane-brief.md`'s pointers. Read a section when
 
 ## 4. Docs and the report
 - Docs as HANDOVER section 3 step 4: a row of `QUESTIONS.md` or `DECISIONS.md` goes where `find.py --toc`/`--section` shows, never after a whole read; a new decision is numbered `NEW` (the integrator numbers it).
-- **The report** is in `<main tree>/.work/<id>/report.md` (the main tree's `.work`, not your worktree's), in HANDOVER section 3 step 5's parts, with the `GATE` line in its Gate part and one "Built so far" row.
+- **The report** is in `<main tree>/.work/<id>/report.md` (the main tree's `.work`, not your worktree's), in HANDOVER section 3 step 5's parts, with the `GATE` line in its Gate part and one "Built so far" row. A batch with no spec carries `From: <why>` (a batch id, or the owner's dated quote `Owner YYYY-MM-DD: "<quote>"`; a fix lane names the batch it fixes): the merge log needs a cause. Docs name a session by its role and batch id.
 - The branch stays as it is: the integrator merges it.
 
 ## 5. The review

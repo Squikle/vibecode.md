@@ -21,6 +21,8 @@
 
         // Lane aliases: the same model under its own name, so a lane gets its own limit (variants are inherited).
         // Spawn lanes as <provider>/M_EXEC-lane#<variant>.
+        // Pin versions here too: a bare family alias (say "<family>") may resolve to an older version by default; give it
+        // a "modelID" of the exact version you want, the same way. Config loads at OpenCode's start.
         "M_EXEC-lane": { "modelID": "M_EXEC", "limit": { "context": 1000000, "input": 171500 } },
         "M_REVIEW-lane": { "modelID": "M_REVIEW", "limit": { "context": 1000000, "input": 171500 } }
       }
