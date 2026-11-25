@@ -91,6 +91,22 @@ says how many lanes (parallel workers) to run.
 - **Global on** also stops runs before their model call in sessions outside every paced slot's tree, while the mode
   is HOLD or LIMITED. `/pacer global off` overrides.
 
+## Quota math
+
+Plan-agnostic rules for whoever reads the usage (the coordinator, you):
+
+- **Think in the usage %, not tokens:** what a token costs differs by plan and model; the % is what runs out.
+- **Project the week at every read:** (100 - week %) / days to its reset is what each day may spend. Under one
+  5-hour window's worth a day, the week runs short: say so.
+- **What one 5-hour window is worth** depends on the plan: after a plan change, measure it from one interval, the
+  week's rise over the 5-hour window's (the source project: 5h +29 points with week +4, so one full window ~ 14 % of
+  the week).
+- **Token sums from OpenCode's database** are weighted by the API's price ratios: in + 1.25 cache write + 0.1 cache
+  read + 5 out.
+- **The plan's tier:** `organization.rate_limit_tier` from `https://api.anthropic.com/api/oauth/profile` (same token
+  and `anthropic-beta` header as the usage read) beats a credentials file, which can be stale.
+- The kit's `scripts/metrics/` keeps these numbers with no model (README, section metrics).
+
 ## Troubleshooting
 
 | You see | Meaning |

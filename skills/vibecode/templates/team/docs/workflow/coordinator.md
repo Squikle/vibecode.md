@@ -22,6 +22,7 @@ You are the owner's entry point. They talk to you; you route what they say to th
   | Read helper, real-agent checks | `{{M_HELPER}}` |
 
 - The CTO and the librarian take no executor slot; one of each at a time.
+- **The priciest model** (`{{M_PLANNER}}`, planner and CTO class) **needs the owner's OK per spawn;** unattended, a `waits on you` 📌 unless the wait blocks a lane. A short follow-up to a running session is no spawn.
 - **Ask the owner only when a wrong guess is expensive** (the question tool, one call, your pick first; 📌 lines: `coordinator-more.md#6`).
 
 ## Start (and every resume)

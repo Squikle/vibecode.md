@@ -1,11 +1,11 @@
 # The coordinator, the rest
 
-The details behind `docs/workflow/coordinator.md`'s pointers. Read a section when it points here (`python tools/work/find.py --section docs/workflow/coordinator-more.md#<n>`), once; never this whole file at the start. Its rules hold as if they were in `coordinator.md`.
+The details behind `coordinator.md`'s pointers: read a section once when one points here (`python tools/work/find.py --section docs/workflow/coordinator-more.md#<n>`), never the whole file at the start. Its rules hold as if in `coordinator.md`.
 
 ## 1. Session care
 
 - **Merges and reviews before new builders:** a `READY TO MERGE` gets its integrator and a `READY FOR REVIEW` its reviewer before you spawn a new executor. A finished batch left waiting drifts from `main`; a new one only adds load.
-- **Keep-alive for a child waiting idle** (its answer given, its next job not ready yet, such as an executor whose review may come back): a one-word `keep-alive` every **50-55 minutes**, answered `ok` with no tools. In the source project the cache stayed warm through gaps of 5-60 minutes (7-10 % cold) and was always cold after 60; one poke re-reads the child's context at the cached price. No job coming: retire it.
+- **Keep-alive for a child waiting idle** (its answer given, its next job not ready yet, such as an executor whose review may come back): a one-word `keep-alive` every **50-55 minutes**, answered `ok` with no tools. The cache stays warm up to ~60 minutes, cold after; one poke re-reads the child's context at the cached price. No job coming: retire it.
 - **Retire, don't resume, a long-idle builder:** cold (over ~1 hour) or over 125k is a fresh session with a pointer brief (worktree, head, where it stopped, what is left), never a resume of the old chat.
 - **The ledger's life:** `.work/<id>/progress.md` is deleted once its batch is MERGED (after its `SHIP .. OK`) or retired. A stale one misleads the next resume.
 - **A usage-limit pause:** each child stops its runs (frees the locks), makes a WIP commit (no stash) and answers `PAUSED <id> <sha> <where>`; `keep-alive` gets `ok` with no tools; `resume` restarts the work.
@@ -60,14 +60,14 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 - **Small doc and data fixes you do yourself** (a status line, a count, a typo); this overrides "small doc fixes wait for the librarian". Read code only to route (which files, "Same files as").
 - **Fill every property that is cheap to fill:** links, the `--from` cause, `From:` lines. A missing one costs a lookup later.
 - **Briefs pass paths, not copies** (`docs/workflow/lane-brief.md`, `lane-more.md` by section, `reviewer-brief.md`, `integrator-brief.md`), and **while `main` is unpushed, your local main's sha**, never `origin/main`: a stale origin made a reviewer's merge a no-op.
-- **Your reads:** never grep `.work` wide, name the file; a shell's `.out` by tail or a `FAIL|ERROR` grep; the role docs once per session, then pointers.
+- **Your reads:** never grep `.work` wide, name the file; never the metrics data or page; a shell's `.out` by tail or a `FAIL|ERROR` grep; the role docs once per session, then pointers.
 - **Audits unasked**, and verify a smell against the session itself (`session-audit.py`) before fixing it. Tools: `tokens-since.py` (what was spent since a time), `cache-ttl.py` (how long the cache stayed warm), `union.py` (merge two lists or ledgers line-wise).
 
 ## 8. Pace
 
 - **Lane cap = the pacer's mode** when it is on (`/pacer`; the kit's `opencode-global/pacer.md`): BURST ≤ 7, GO ≤ 5, EASE ≤ 3, SLOW ≤ 2, HOLD and LIMITED none new; never over {{EXECUTORS}}. Helpers, the planner, the CTO and the librarian don't count.
 - **On a `[pacer ...] MODE ...` line:** answer in 2 lines and spawn within the new cap.
-- **Usage check:** at each MODE line, before a burst and between fresh spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder). The 5-hour window up more than ~15 points in 30 minutes: drop one mode.
+- **Usage check:** at each MODE line, before a burst and between fresh spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder). The 5-hour window up more than ~15 points in 30 minutes: drop one mode. **Project the week** each time: (100 - week %) / days to its reset; under one 5-hour window's worth a day, tell the owner. The rest of the quota math: the kit's `pacer.md`.
 - **Gate cap:** no fresh builder while 4 or more gates run. A gate queued on a lock or a CPU slot uses ~0 CPU; `gate.py`'s slots hold back the rest.
 - **Heartbeat** (`#3`); **every third beat** a peek sweep: `session-audit.py --peek` (one line per running child).
 - Parallel lanes whenever nothing blocks.
