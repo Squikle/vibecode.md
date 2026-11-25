@@ -559,8 +559,11 @@ def ship(sha: str, a, config: dict) -> str:
         cfg = config.get("ship") or {}
         up = a.up or ((f"yes, redeployed and healthy" if cfg.get("deploy") else "no deploy configured") if code else "no, docs only")
         if (tree / "tools/work/merge-log.py").exists() and (tree / "docs/MERGES.md").exists():
+            cause = a.from_ or cause_of(a.batch, tree, config["main"])  # the spec, then the report's From: line
+            if not cause:
+                raise ShipError("cause", f"NO CAUSE: no --from, no docs/specs/{a.batch}.md, no From: line in its report")
             step("merge-log", [sys.executable, "-I", "tools/work/merge-log.py", "--batch", a.batch, "--sha", short,
-                               "--what", a.what, "--up", up, "--try", a.try_])
+                               "--what", a.what, "--up", up, "--try", a.try_, "--from", cause])
             step("commit", ["git", "commit", "-q", "-m", f"Merge log: {a.batch}", "--", "docs/MERGES.md"])
         pushed = sha if a.dry_run else git("rev-parse", "HEAD", cwd=tree)
         step("push", ["git", "push", "-q", "origin", "HEAD:main"])
@@ -598,6 +601,17 @@ def ship(sha: str, a, config: dict) -> str:
             result["line"] = status_line(result)
             path.write_text(json.dumps(result, indent=1), encoding="utf-8")
     return line
+
+
+def cause_of(batch: str, tree: Path, main) -> str:
+    """The merge's default cause (tools/work/cause.py, `merge-cause`): the spec in `tree`, then the `From:` line of
+    `<main>/.work/<id>/report.md`; "" when there is none or the tree has no cause.py."""
+    sys.path.insert(0, str(Path(tree) / "tools" / "work"))
+    try:
+        from cause import cause_in
+    except ImportError:
+        return ""
+    return cause_in(batch, Path(tree), Path(main))
 
 
 def healthy(url: str) -> None:
@@ -653,6 +667,7 @@ def main(argv=None) -> int:
     p.add_argument("--what", required=True)
     p.add_argument("--try", dest="try_", required=True)
     p.add_argument("--up", help="the merge log's Up (default: from the diff and the deploy)")
+    p.add_argument("--from", dest="from_", help="the merge log's From (default: the spec, the report's From: line)")
     p.add_argument("--no-roadmap", action="store_true", help="ship though the batch's ROADMAP row is not marked done")
     p.add_argument("--dry-run", action="store_true", help="print the steps, change nothing")
     a = ap.parse_args(argv)

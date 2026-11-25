@@ -2,7 +2,8 @@
 
 Usage (from main's worktree): python -I -X utf8 tools/work/integrate.py <branch> <id> [<id> ...]
 
-- First checks each id's report and its row: a missing one stops with nothing merged.
+- First checks each id's report, its row and its cause (merge-cause: the branch's spec, or a `From:` line in the
+  report naming a `ref` or the owner's dated word; tools/work/cause.py): a missing one stops with nothing merged.
 - git merge --no-ff --no-commit <branch>; on conflicts prints CONFLICTS LEFT and the files, exits 1.
   Resolve, `git add`, run again with the same arguments: it resumes.
 - Per id: drops its row from docs/BACKLOG.md (renumbers), moves docs/specs/<id>.md to done/,
@@ -12,6 +13,9 @@ Usage (from main's worktree): python -I -X utf8 tools/work/integrate.py <branch>
 - Commits the merge: "Merge <branch>: <ids>."
 """
 import pathlib, re, subprocess, sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))  # `python -I` leaves it off
+from cause import HAS_CAUSE  # noqa: E402
 
 branch, ids = sys.argv[1], sys.argv[2:]
 
@@ -33,8 +37,13 @@ for i in ids:
     rep = common / ".work" / i / "report.md"
     if not rep.exists():
         sys.exit(f"NO REPORT {rep}: nothing merged")
-    if not any(l.startswith(f"| `{i}` |") for l in rep.read_text(encoding="utf-8").splitlines()):
+    text = rep.read_text(encoding="utf-8")
+    if not any(l.startswith(f"| `{i}` |") for l in text.splitlines()):
         sys.exit(f'NO HANDOVER ROW in {rep}: a line starting "| `{i}` |" (not in backticks or a fence); nothing merged')
+    # Its cause: `gate.py ship` writes it to docs/MERGES.md, so a batch with none never merges.
+    spec = any(git("cat-file", "-e", f"{branch}:docs/specs/{d}{i}.md", check=False).returncode == 0 for d in ("done/", ""))
+    if not spec and not HAS_CAUSE.search(text):
+        sys.exit(f'NO CAUSE for {i}: no docs/specs/{i}.md on {branch}, no "From:" line in {rep}; nothing merged')
 
 if not (gitdir / "MERGE_HEAD").exists():
     r = git("merge", "--no-ff", "--no-commit", branch, check=False)
