@@ -11,6 +11,8 @@ New-Item -ItemType Directory -Force (Split-Path $Log) | Out-Null
 "start $(Get-Date -Format o)" | Set-Content $Log
 if (git status --porcelain | Where-Object { $_ -notmatch '\.serena' }) { "WARN: uncommitted changes are NOT tested" | Add-Content $Log }
 $sha = git rev-parse HEAD
+# git's own ssh has no timeout: bound it like the ssh below (an owner's GIT_SSH_COMMAND is kept)
+if (-not $env:GIT_SSH_COMMAND) { $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=4" }
 git push -q -f "${RemoteHost}:$RemotePath" "HEAD:refs/heads/remote/$Id" *>> $Log
 if ($LASTEXITCODE -ne 0) { "FAILED: push to $RemoteHost" | Add-Content $Log; exit 1 }
 $links = ($Link | ForEach-Object { "[ -e `"`$wt/$_`" ] || ln -s `"$RemotePath/$_`" `"`$wt/$_`"" }) -join "`n"

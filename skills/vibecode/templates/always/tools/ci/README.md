@@ -68,7 +68,7 @@ The `bootstrap` batch fills each `cmd`. A part:
 | `light` | takes no CPU slot (a type check, a lint: little CPU) |
 | `renderer` | a browser part's: `software` (takes a software slot), `gpu`, or `any` (no browser; the default). A known red's `renderer` limits it to those parts |
 | `docker` | run inside the compose service (`docker.compose`, `docker.service`), the export mounted at `/src`, `TMPDIR=/tmp` |
-| `remote` | run on the second machine over ssh (`remote`: `name`, `ssh`, `repo`, `git`); the sha is pushed there first. ssh never prompts (`BatchMode`) and gives up on an unreachable host in 20 s |
+| `remote` | run on the second machine over ssh (`remote`: `name`, `ssh`, `repo`, `git`); the sha is pushed there first. ssh never prompts (`BatchMode`) and gives up on an unreachable host in 20 s; git's pushes and fetches get the same bounds (`GIT_SSH_COMMAND`, unless you set your own) |
 
 Top level: `base`, `lock_minutes` (50: a hold older is stale), `wait_minutes` (180: a longer wait is WAITED), `cpu_slots`, `cpu_max`, `software_slots` (above; 0 slots: off), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
 diff that redeploys nothing), `ship.deploy` (the command that redeploys the owner's app), `ship.health` (a URL that

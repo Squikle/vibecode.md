@@ -107,6 +107,15 @@ class Commands(unittest.TestCase):
         self.assertIn("ConnectTimeout=20", args)
         self.assertLess(args.index("ConnectTimeout=20"), args.index("box"))
 
+    def test_git_over_ssh_is_bounded(self):
+        cmd = gate.git_env({"PATH": "x"})["GIT_SSH_COMMAND"]
+        self.assertTrue(cmd.startswith("ssh ") and "BatchMode=yes" in cmd and "ConnectTimeout=20" in cmd)
+        self.assertEqual(gate.git_env({"GIT_SSH_COMMAND": "mine"})["GIT_SSH_COMMAND"], "mine")
+        calls = {}
+        step = lambda name, args, **kw: calls.setdefault(name, kw) and ""
+        self.assertEqual(gate.remote_ff({"remote": {"git": "box:repo", "ssh": "box"}}, step, "abcd1234"), "ok")
+        self.assertIn("GIT_SSH_COMMAND", calls["remote-push"]["env"])
+
 
 class Locks(Base):
     def test_drop_if_keeps_a_hold_taken_since(self):

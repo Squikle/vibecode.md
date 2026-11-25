@@ -568,6 +568,15 @@ def remove(tree: Path) -> None:
 # ssh never asks (no prompt to hang on) and is bounded: an unreachable remote fails in 20 s, a dead link in ~2 min,
 # not at the part's `timeout`.
 SSH_OPTS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=4")
+GIT_NET_S = 10 * 60  # a push or fetch that has not finished in this long is killed
+
+
+def git_env(env=None) -> dict:
+    """git's own ssh (a push or fetch over ssh) bounded like `SSH_OPTS`: plain git has no timeout and waits forever on
+    a host that stopped answering. An owner's own `GIT_SSH_COMMAND` is kept."""
+    e = dict(os.environ if env is None else env)
+    e.setdefault("GIT_SSH_COMMAND", "ssh " + " ".join(SSH_OPTS))
+    return e
 
 
 def command(part: dict, config: dict, tree: Path, cmd: str) -> tuple[list[str] | str, bool, str]:
@@ -650,7 +659,8 @@ def run_part(part: dict, config: dict, tree: Path, logs: Path, sha: str) -> dict
                 Path(j).unlink(missing_ok=True)  # a report from an earlier run is not this run's
         if part.get("remote"):  # the remote cannot fetch the lane's commit: push it there first
             r = config["remote"]
-            pushed = run(["git", "push", "-q", "-f", r["git"], f"{sha}:refs/heads/ci/{sha[:8]}"], cwd=config["main"])
+            pushed = run(["git", "push", "-q", "-f", r["git"], f"{sha}:refs/heads/ci/{sha[:8]}"], cwd=config["main"],
+                         env=git_env(), timeout=GIT_NET_S)
             if pushed.returncode != 0:
                 return {**got, "error": f"push to the remote failed: {(pushed.stderr or '').strip()[:150]}", "rc": pushed.returncode}
         args, shell, cwd = command(part, config, tree, fill(cmd, got))
@@ -918,7 +928,7 @@ def ship(sha: str, a, config: dict) -> str:
         return done.stdout
 
     try:
-        if run(["git", "fetch", "-q", "origin"], cwd=str(tree)).returncode != 0:
+        if run(["git", "fetch", "-q", "origin"], cwd=str(tree), env=git_env(), timeout=GIT_NET_S).returncode != 0:
             raise ShipError("fetch", "git fetch failed")
         if not result or result.get("sha") != sha or result.get("mode") == "only":
             return f"SHIP {short} NOT-GATED: no full gate of this sha (run `gate.py run {short}` first)"
@@ -942,7 +952,7 @@ def ship(sha: str, a, config: dict) -> str:
                                "--what", a.what, "--up", up, "--try", a.try_, "--from", cause])
             step("commit", ["git", "commit", "-q", "-m", f"Merge log: {a.batch}", "--", "docs/MERGES.md"])
         pushed = sha if a.dry_run else git("rev-parse", "HEAD", cwd=tree)
-        step("push", ["git", "push", "-q", "origin", "HEAD:main"])
+        step("push", ["git", "push", "-q", "origin", "HEAD:main"], env=git_env())
         vault = "skip"
         if (tree / "tools/vault/vaultify.py").exists():
             out = step("vault", [sys.executable, "-I", "tools/vault/vaultify.py", "--rev", "origin/main"], check=False)
@@ -1009,7 +1019,7 @@ def remote_ff(config: dict, step, short: str) -> str:
         return "skip"
     tmp = f"ci/ship-{short}"
     try:
-        step("remote-push", ["git", "push", "-q", "-f", r["git"], f"HEAD:refs/heads/{tmp}"])
+        step("remote-push", ["git", "push", "-q", "-f", r["git"], f"HEAD:refs/heads/{tmp}"], env=git_env())
         step("remote-ff", ["ssh", *SSH_OPTS, r["ssh"], f"cd {r.get('repo', '.')} && {{ git merge -q --ff-only {tmp}; rc=$?; git branch -q -D {tmp}; exit $rc; }}"])
     except ShipError as e:
         return f"fail({e.reason[:60]})"
