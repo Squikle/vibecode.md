@@ -105,7 +105,8 @@ owner's app by itself, so a merge nobody ships by hand is still running a minute
 
 `known-reds.json` lists the reds a merge may carry: `part`, `test` (the JUnit id `<classname>::<name>`, or with `title`
 the file or class plus part of the test's name, so a moved line still matches), `kind` (`red` or `flake`), `machines`
-(`["any"]` or names), `why`, `source`. **Each one also has its `docs/QUESTIONS.md` row**; the librarian drops both once
+(`["any"]` or names), `renderer` (optional: only parts drawing that way), `why`, `source`. A red seen on one machine or
+renderer only is scoped by those and the test's title, never by its line alone. **Each one also has its `docs/QUESTIONS.md` row**; the librarian drops both once
 the test has been green for two full gates.
 
 ## Set up a machine
