@@ -41,8 +41,9 @@ python tools/ci/gate.py run <sha> --stack 2     # each locked part on the 2nd lo
   a container) first takes one of `software_slots` (1). Slots are `.work/ci/cpu|software/slot<k>`; a dead gate's slot
   (pid gone or reused) is taken over. The wait counts as the wait (`wait_minutes`, WAITED), not the part's `timeout`.
   Remote parts take none. Why: in the source project too many gates at once turned into timeout reds (`gate.py`).
-- **Waits on record:** each wait and each command's start (`$ <part>`) also go to `.work/ci/<sha8>/gate.log`;
-  `coord-beat.py` shows the live ones as its `waiting:` line.
+- **Waits on record:** each wait and each command's start (`$ <part>`) also go to `.work/ci/<sha8>/gate.log`, the
+  gate's pid (and `OPENCODE_SESSION_ID`) to `gate.pid`; `coord-beat.py` shows the live ones as its `waiting:` line,
+  never those of a gate whose pid is gone. Console lines print on any code page (`?` for what it lacks).
 - **Stacks:** a part whose `lock` is a list (`["e2e", "e2e2"]`: two copies of a test stack) takes the first free one,
   first tried first (`MOVED e2e: e2e held by ...: ran on e2e2` under the line); both held, the first freed. `{lock}`
   and `{stack}` (1, 2) in its commands, and `CI_LOCK`/`CI_STACK`, say which it got. `--stack N` pins the Nth (a part
@@ -66,8 +67,8 @@ The `bootstrap` batch fills each `cmd`. A part:
 | `heavy` | BUSY instead of a run while a process in `busy.processes` runs (a game, a render, another benchmark) |
 | `light` | takes no CPU slot (a type check, a lint: little CPU) |
 | `renderer` | a browser part's: `software` (takes a software slot), `gpu`, or `any` (no browser; the default). A known red's `renderer` limits it to those parts |
-| `docker` | run inside the compose service (`docker.compose`, `docker.service`), the export mounted at `/src` |
-| `remote` | run on the second machine over ssh (`remote`: `name`, `ssh`, `repo`, `git`); the sha is pushed there first |
+| `docker` | run inside the compose service (`docker.compose`, `docker.service`), the export mounted at `/src`, `TMPDIR=/tmp` |
+| `remote` | run on the second machine over ssh (`remote`: `name`, `ssh`, `repo`, `git`); the sha is pushed there first. ssh never prompts (`BatchMode`) and gives up on an unreachable host in 20 s |
 
 Top level: `base`, `lock_minutes` (50: a hold older is stale), `wait_minutes` (180: a longer wait is WAITED), `cpu_slots`, `cpu_max`, `software_slots` (above; 0 slots: off), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
 diff that redeploys nothing), `ship.deploy` (the command that redeploys the owner's app), `ship.health` (a URL that

@@ -26,5 +26,5 @@ echo "testing $sha in `$wt"
 bash "`$wt/tools/work/lock.sh" e2e "remote-$Id" "`$wt" '$cmdQ'
 echo "exit `$?"
 "@
-($sh -replace "`r", "") | ssh -o ServerAliveInterval=30 $RemoteHost bash -s *>> $Log
+($sh -replace "`r", "") | ssh -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 $RemoteHost bash -s *>> $Log
 "done $(Get-Date -Format o)" | Add-Content $Log

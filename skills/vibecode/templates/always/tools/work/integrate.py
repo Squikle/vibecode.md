@@ -6,13 +6,15 @@ Usage (from main's worktree): python -I -X utf8 tools/work/integrate.py <branch>
   report naming a `ref` or the owner's dated word; tools/work/cause.py): a missing one stops with nothing merged.
 - git merge --no-ff --no-commit <branch>; on conflicts prints CONFLICTS LEFT and the files, exits 1.
   Resolve, `git add`, run again with the same arguments: it resumes.
+- Builds the doc vault of the merged docs in a temp folder (tools/vault/vaultify.py --src): a miss (a table row of the
+  wrong shape) prints VAULT MISS lines and stops with nothing committed; fix, `git add`, run again: it resumes.
 - Per id: drops its row from docs/BACKLOG.md (renumbers), moves docs/specs/<id>.md to done/,
   adds the report's "Built so far" row (a line starting "| `<id>` |") to docs/HANDOVER.md section 1,
   appends the report (.work/<id>/report.md in the main checkout) to docs/reports/built.md.
 - Numbers each `| NEW |` decision in docs/DECISIONS.md after the highest number.
 - Commits the merge: "Merge <branch>: <ids>."
 """
-import argparse, pathlib, re, subprocess, sys
+import argparse, json, pathlib, re, shutil, subprocess, sys, tempfile
 
 # Parsed before anything runs: a `-h` once read as a branch name and the merge went on.
 _ap = argparse.ArgumentParser(prog="integrate.py", description="Merge a finished batch branch into the checked-out "
@@ -60,6 +62,47 @@ left = git("diff", "--name-only", "--diff-filter=U").stdout.split()
 if left:
     print("CONFLICTS LEFT:\n  " + "\n  ".join(left))
     sys.exit(1)
+
+
+def vault_misses():
+    """The vault built from the merged docs (this tree's `docs/` and `AGENTS.md`, copied) into a temp folder, never
+    `.work/vault`: its misses, [] when clean. None with no vaultify.py (a project without the vault)."""
+    tool = next((p for p in (top / "tools/vault/vaultify.py", pathlib.Path(__file__).resolve().parents[1] / "vault/vaultify.py")
+                 if p.is_file()), None)
+    if tool is None:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        src = pathlib.Path(tmp) / "tree"
+        src.mkdir()
+        if (top / "docs").is_dir():
+            shutil.copytree(top / "docs", src / "docs")
+        if (top / "AGENTS.md").is_file():
+            shutil.copy(top / "AGENTS.md", src / "AGENTS.md")
+        got = subprocess.run([sys.executable, "-I", "-B", "-X", "utf8", str(tool), "--src", str(src),
+                              "--vault", str(pathlib.Path(tmp) / "out" / "vault")],
+                             capture_output=True, text=True, encoding="utf-8")
+    found = [l[len("miss: "):] for l in got.stderr.splitlines() if l.startswith("miss: ")]
+    try:  # vaultify prints its first 8 misses only; its JSON line counts them all
+        more = json.loads(got.stdout.strip().splitlines()[-1]).get("misses", 0) - len(found)
+    except (ValueError, IndexError, AttributeError):
+        more = 0
+    if more > 0:
+        found.append(f"and {more} more (vaultify prints its first 8)")
+    if got.returncode and not found:
+        found = ["the vault build failed: " + got.stderr.strip()[-300:]]
+    return found
+
+
+# The vault main's next build makes, built first from the merged docs: a table row of the wrong shape (a stray cell
+# left where a row was dropped by hand) was found only after the merge. Two branches each clean can merge into a miss.
+missed = vault_misses()
+if missed:
+    for m in missed:
+        print("VAULT MISS: " + m, file=sys.stderr)
+    sys.exit("the VAULT MISS lines above are in the merged docs; nothing committed. Fix each here (`git add`, run "
+             "again: it resumes) or on the branch (`git merge --abort`, fix, run again); a miss main holds already "
+             "(.work/vault-alert.json names it) is fixed on main first")
+print("vault check: " + ("no tools/vault/vaultify.py, skipped" if missed is None else "clean"))
 
 
 def rw(path, fn):

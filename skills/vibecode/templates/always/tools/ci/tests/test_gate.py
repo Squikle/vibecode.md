@@ -92,6 +92,22 @@ class Slots(Base):
         self.assertTrue(text.endswith("$ e2e\n"))
 
 
+class Commands(unittest.TestCase):
+    def test_printable_on_a_cp1252_console(self):
+        class Cp1252:
+            encoding = "cp1252"
+        self.assertEqual(gate.printable("GREEN → ✓ café", Cp1252()), "GREEN ? ? café")
+
+    def test_docker_tmpdir_and_bounded_ssh(self):
+        args, _, _ = gate.command({"docker": True}, {"docker": {}}, Path("tree"), "make test")
+        self.assertEqual(args[args.index("TMPDIR=/tmp") - 1], "-e")
+        self.assertLess(args.index("TMPDIR=/tmp"), args.index("ci"))  # a `run` option: before the service
+        args, _, _ = gate.command({"remote": True}, {"remote": {"ssh": "box"}, "_sha": "a" * 40}, Path("tree"), "make")
+        self.assertIn("BatchMode=yes", args)
+        self.assertIn("ConnectTimeout=20", args)
+        self.assertLess(args.index("ConnectTimeout=20"), args.index("box"))
+
+
 class Locks(Base):
     def test_drop_if_keeps_a_hold_taken_since(self):
         path = self.main / "x.lock"

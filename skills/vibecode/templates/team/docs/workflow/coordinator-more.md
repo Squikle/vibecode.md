@@ -5,7 +5,7 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 ## 1. Session care
 
 - **Merges and reviews before new builders:** a `READY TO MERGE` gets its integrator and a `READY FOR REVIEW` its reviewer before you spawn a new executor. A finished batch left waiting drifts from `main`; a new one only adds load.
-- **Keep-alive for a child waiting idle** (its answer given, its next job not ready yet, such as an executor whose review may come back): a one-word `keep-alive` every **50-55 minutes**, answered `ok` with no tools. In the source project the cache stayed warm through gaps of 5-60 minutes (7-10 % cold) and was always cold after 60; one poke re-reads the child's context at the cached price. A child with no job coming: retire it instead.
+- **Keep-alive for a child waiting idle** (its answer given, its next job not ready yet, such as an executor whose review may come back): a one-word `keep-alive` every **50-55 minutes**, answered `ok` with no tools. In the source project the cache stayed warm through gaps of 5-60 minutes (7-10 % cold) and was always cold after 60; one poke re-reads the child's context at the cached price. No job coming: retire it.
 - **Retire, don't resume, a long-idle builder:** cold (over ~1 hour) or over 125k is a fresh session with a pointer brief (worktree, head, where it stopped, what is left), never a resume of the old chat.
 - **The ledger's life:** `.work/<id>/progress.md` is deleted once its batch is MERGED (after its `SHIP .. OK`) or retired. A stale one misleads the next resume.
 - **A usage-limit pause:** each child stops its runs (frees the locks), makes a WIP commit (no stash) and answers `PAUSED <id> <sha> <where>`; `keep-alive` gets `ok` with no tools; `resume` restarts the work.
@@ -17,7 +17,7 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 - **One integrator on the main worktree at a time;** a new one only after the last retired; you don't merge while one holds it.
 - **A chain merges as one;** so does a stacked pair where the first alone is red: back to back, one ship after both.
 - **Decision numbers:** `integrate.py` numbers only `NEW` rows; a lane that numbered its own can clash with main's. Before the merge, check `docs/DECISIONS.md` for a repeat; renumber the lane's, commit messages too.
-- **A clean merge-tree is no semantic check:** grep what main added since the lane was cut for new cases of its pattern (a mark put on every button misses one a parallel batch added); a source-scan unit test holds them all.
+- **A clean merge-tree is no semantic check:** grep what main added since the lane was cut for new cases of its pattern; a source-scan unit test holds them all.
 - **A report's shas are the merged ones:** after a rebase, a rollback commit it names gets its new sha.
 - **A row built in several lanes** merges lane by lane, `--batch <row>-a`, `<row>-b`, ...; only the last lane merges as `<row>`, so ship checks its ROADMAP mark only then.
 - **Planner and CTO passes** merge by a plain `git merge --no-ff <branch>` and the docs test (`tools/work/check-docs.py`), not `integrate.py`.
@@ -26,7 +26,7 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 
 ## 3. The heartbeat in one call
 
-`python -I -X utf8 tools/work/coord-beat.py` prints at most 25 lines: the newest gate verdicts, the machine locks, the gates waiting for a lock or slot, your children with how long each has been quiet (opencode's database read-only, else its CLI list), and the integrator queue's head. Read-only; one call instead of five.
+`python -I -X utf8 tools/work/coord-beat.py` prints at most 25 lines: the newest gate verdicts, the machine locks, the gates waiting for a lock or slot, your children with how long each has been quiet (opencode's database read-only, else its CLI list), and the integrator queue's head. Read-only.
 
 ## 4. Clean stages
 
@@ -59,7 +59,7 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 - **No change for its own sake:** weigh a change, or say in a line why the current setup is already the best.
 - **Small doc and data fixes you do yourself** (a status line, a count, a typo); this overrides "small doc fixes wait for the librarian". Read code only to route (which files, "Same files as").
 - **Fill every property that is cheap to fill:** links, the `--from` cause, `From:` lines. A missing one costs a lookup later.
-- **Briefs pass paths, not copies:** `docs/workflow/lane-brief.md` (`lane-more.md` by section), `reviewer-brief.md`, `integrator-brief.md`.
+- **Briefs pass paths, not copies** (`docs/workflow/lane-brief.md`, `lane-more.md` by section, `reviewer-brief.md`, `integrator-brief.md`), and **while `main` is unpushed, your local main's sha**, never `origin/main`: a stale origin made a reviewer's merge a no-op.
 - **Your reads:** never grep `.work` wide, name the file; a shell's `.out` by tail or a `FAIL|ERROR` grep; the role docs once per session, then pointers.
 - **Audits unasked**, and verify a smell against the session itself (`session-audit.py`) before fixing it. Tools: `tokens-since.py` (what was spent since a time), `cache-ttl.py` (how long the cache stayed warm), `union.py` (merge two lists or ledgers line-wise).
 
@@ -69,17 +69,16 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 - **On a `[pacer ...] MODE ...` line:** answer in 2 lines and spawn within the new cap.
 - **Usage check:** at each MODE line, before a burst and between fresh spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder). The 5-hour window up more than ~15 points in 30 minutes: drop one mode.
 - **Gate cap:** no fresh builder while 4 or more gates run. A gate queued on a lock or a CPU slot uses ~0 CPU; `gate.py`'s slots hold back the rest.
-- **Keep-alive** every 50-55 minutes for a child waiting idle (`#1`): past ~60 minutes it is cold.
 - **Heartbeat** (`#3`); **every third beat** a peek sweep: `session-audit.py --peek` (one line per running child).
-- **One integrator at a time, in the main worktree**; parallel lanes whenever nothing blocks.
+- Parallel lanes whenever nothing blocks.
 
 ## 9. Gate and merge, the fine print
 
 - **Who runs which gate:** once per batch, in full, `gate.py run <head> --base <sha it was cut from>`: the reviewer for a reviewed batch, after its fixes; else the executor. A red is rerun alone (`--only <file>[:line] ...`). A full gate can take hours: one foreground call, the longest timeout. Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
 - **Stacks and locks:** `--config <json>` picks a machine set; each set has its own lock name. **No cancel:** kill only your own test tree and free only your own lock.
-- **Keep the second test machine busy:** a gate whose browser part has waited 30+ minutes for a stack, its other parts done: run that part on the other machine (`--parts <part>` with that machine's config) and kill the waiting gate's tree. A new commit supersedes your own running gate: kill its tree too.
-- **Stacked merges ship under one full gate** (`#2`). **Mixed line endings** merge only through `tools/work/eolmerge.py`.
+- **Keep the second test machine busy:** a gate whose browser part has waited 30+ minutes for a stack, its other parts done: run that part on the other machine (`--parts <part>` with that machine's config) and kill the waiting gate's tree. **A redundant browser part:** a full run on the other machine of the same code exists (only docs changed since): stop it; the lane gates with the other parts and cites that run's log. A new commit supersedes your own running gate: kill its tree too.
+- **Mixed line endings** merge only through `tools/work/eolmerge.py`.
 - **Every merge names its cause:** `merge-log.py --from '<why>'` (single quotes), else it refuses with `NO CAUSE`; `cause.py` checks one. A batch with no spec carries a `From:` line in its report (the owner's word with a date, or the parent batch).
 - **Merges** stamp times from the real clock (`Get-Date` / `date`), never a guess.
-- **PowerShell traps:** `"${w}:"` before a colon; `git push` writes to stderr, so check `$LASTEXITCODE`; `.Substring` throws on a short string; Python as `python -I -X utf8`; LF files via `[IO.File]::WriteAllText(p, s, [Text.UTF8Encoding]::new($false))`. A long inline command that writes files goes in a script file you then run: inline ones die when the server restarts mid-call.
+- **PowerShell traps:** `"${w}:"` before a colon; `git push` writes to stderr, so check `$LASTEXITCODE`; Python as `python -I -X utf8`; LF files via `[IO.File]::WriteAllText(p, s, [Text.UTF8Encoding]::new($false))`. A long inline command that writes files goes in a script file you then run: inline ones die when the server restarts mid-call.
 - **OpenCode:** its database is read-only to you; never restart or re-point the server (it is the TUI's child); plugins reload by themselves, config loads at start.

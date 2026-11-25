@@ -58,4 +58,6 @@ Edit nothing, commit nothing, run no tests, start no containers, touch no other 
 
 **The gate** is `python -I -X utf8 tools/ci/gate.py run <head>` (foreground, long timeout; `tools/ci/README.md`)<!-- if:e2e -->, e2e under its lock<!-- endif -->. `BUSY`/`WAITED` (a lock stayed held; nothing ran): wait for the notice, then again; a red: run it alone; a red your own fix caused is yours. If a fix of yours turns out bigger than you thought, revert it and mark that finding `major`.
 
+**A table row you drop or edit by hand** leaves no stray cell: as many `|` as its header. `integrate.py` builds the vault of the merged docs first and refuses a row of the wrong shape (`VAULT MISS`).
+
 Answer in at most 8 lines: `READY TO MERGE <id> head=<sha>` or the verdict, the count per severity, and the top three findings in one line each.

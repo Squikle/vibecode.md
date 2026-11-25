@@ -194,11 +194,18 @@ TOUCH_S = 60  # how often a held lock's time is renewed: a part longer than `loc
 SAY_LOG: list[Path] = []  # the running gate's `gate.log` (its waits and each command's start, read by coord-beat)
 
 
+def printable(text: str, stream=None) -> str:
+    """`text` as the console can print it: a cp1252 console raises on a character it lacks (an arrow, a check mark)
+    and the gate died mid-print. What it cannot show is replaced; the files keep the UTF-8."""
+    enc = getattr(stream or sys.stdout, "encoding", None) or "utf-8"
+    return text.encode(enc, "replace").decode(enc)
+
+
 def say(text: str, console: bool = True) -> None:
     """A wait, live on the console (stderr: the status line and a quiet run's 15 lines stay on stdout), and a line
     of the run's `gate.log`: `<part>: waiting for <what>`, then `$ <part>` once that part's command starts."""
     if console:
-        print(text, file=sys.stderr, flush=True)
+        print(printable(text, sys.stderr), file=sys.stderr, flush=True)
     for log in SAY_LOG:
         try:
             with open(log, "a", encoding="utf-8") as out:
@@ -558,19 +565,26 @@ def remove(tree: Path) -> None:
     run(["git", "worktree", "prune"], cwd=str(tree.parent))
 
 
+# ssh never asks (no prompt to hang on) and is bounded: an unreachable remote fails in 20 s, a dead link in ~2 min,
+# not at the part's `timeout`.
+SSH_OPTS = ("-o", "BatchMode=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=4")
+
+
 def command(part: dict, config: dict, tree: Path, cmd: str) -> tuple[list[str] | str, bool, str]:
     """`(args, shell, cwd)` of a part's command: on the host, in the compose service (`docker`) or over ssh (`remote`)."""
     if part.get("docker"):
         d = config.get("docker") or {}
         compose = str(tree / d.get("compose", "docker-compose.ci.yml"))
+        # TMPDIR: temp files in the container's own /tmp, never on the bind mount or a host path passed through (the
+        # source project: a fixture test took 117-186 s with TMPDIR elsewhere, 2 s with /tmp).
         return (["docker", "compose", "-f", compose, "run", "--rm", "-T", "-v", f"{tree}:/src", "-w", "/src",
-                 d.get("service", "ci"), "sh", "-c", cmd], False, str(tree))
+                 "-e", "TMPDIR=/tmp", d.get("service", "ci"), "sh", "-c", cmd], False, str(tree))
     if part.get("remote"):
         r = config["remote"]
         repo, src = r.get("repo", "."), f".work/ci/src/{config['_sha'][:8]}"
         script = (f"cd {repo} && git worktree add -q --detach {src} {config['_sha']} && cd {src} && {{ {cmd}; }}; rc=$?; "
                   f"cd {repo} && git worktree remove --force {src}; git branch -q -D ci/{config['_sha'][:8]}; exit $rc")
-        return (["ssh", r["ssh"], script], False, str(tree))
+        return (["ssh", *SSH_OPTS, r["ssh"], script], False, str(tree))
     return (cmd, True, str(tree))
 
 
@@ -833,6 +847,8 @@ def do_run(config: dict, plan: dict, keep: bool) -> dict:
     logs.mkdir(parents=True, exist_ok=True)
     (logs / "plan.txt").write_text(describe(plan) + "\n", encoding="utf-8")
     SAY_LOG[:] = [logs / "gate.log"]
+    sid = os.environ.get("OPENCODE_SESSION_ID", "")  # whose gate; coord-beat drops the waits of a gate whose pid is gone
+    (logs / "gate.pid").write_text(f"pid {os.getpid()}\n" + (f"session {sid}\n" if sid else ""), encoding="utf-8")
     tree = export(sha, config)
     parts = []
     try:
@@ -994,7 +1010,7 @@ def remote_ff(config: dict, step, short: str) -> str:
     tmp = f"ci/ship-{short}"
     try:
         step("remote-push", ["git", "push", "-q", "-f", r["git"], f"HEAD:refs/heads/{tmp}"])
-        step("remote-ff", ["ssh", r["ssh"], f"cd {r.get('repo', '.')} && {{ git merge -q --ff-only {tmp}; rc=$?; git branch -q -D {tmp}; exit $rc; }}"])
+        step("remote-ff", ["ssh", *SSH_OPTS, r["ssh"], f"cd {r.get('repo', '.')} && {{ git merge -q --ff-only {tmp}; rc=$?; git branch -q -D {tmp}; exit $rc; }}"])
     except ShipError as e:
         return f"fail({e.reason[:60]})"
     return "ok"
@@ -1037,14 +1053,14 @@ def main(argv=None) -> int:
     sha = git("rev-parse", f"{a.sha}^{{commit}}")
     if a.cmd == "ship":
         line = ship(sha, a, config)
-        print(line)
+        print(printable(line))
         return 0 if " OK " in f"{line} " else 1
     if a.cmd == "status":
         path = out_dir(config) / f"{sha[:8]}.json"
         if not path.exists():
             print(f"GATE {sha[:8]} NONE: no run yet ({path})")
             return 1
-        print(show(json.loads(path.read_text(encoding="utf-8")), quiet=False))
+        print(printable(show(json.loads(path.read_text(encoding="utf-8")), quiet=False)))
         return 0
     if a.no_remote:
         config = {**config, "no_remote": True}
@@ -1053,10 +1069,10 @@ def main(argv=None) -> int:
         raise SystemExit("--stack: 1 or more")
     plan = build_plan(config, sha, a.base or config["base"], picked, getattr(a, "only", None), a.stack)
     if a.cmd == "plan":
-        print(json.dumps(plan, indent=1) if a.json else describe(plan))
+        print(json.dumps(plan, indent=1) if a.json else printable(describe(plan)))
         return 0
     result = do_run(config, plan, a.keep)
-    print(show(result, quiet=plan["mode"] == "only"))
+    print(printable(show(result, quiet=plan["mode"] == "only")))
     return 0 if result["verdict"] in SHIPPABLE else 1
 
 

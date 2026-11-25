@@ -4,7 +4,7 @@
 One call instead of five: the pacer's usage line (`pacer.py status --json` from the opt-in kit, skipped when missing), the latest
 gate verdict per sha (`.work/ci/<sha8>.json` and `.only.json`, and a run folder with no verdict yet), the machine
 locks (`.work/<name>.lock` or `.lock.d`: holder and age; a running or failed autodeploy too), the gates waiting for a
-lock or a CPU slot (the `waiting for` lines of each run's `gate.log`), the coordinator's child sessions with how long each has
+lock or a CPU slot (the `waiting for` lines of each run's `gate.log`; not a gate whose `gate.pid` is gone), the coordinator's child sessions with how long each has
 been quiet (the opencode database read-only for the children; with no database, `opencode session list --format
 json` for the top level), and the head of `.work/integrator-queue.md`.
 
@@ -131,6 +131,42 @@ WAIT_MIN = 240  # a gate waits at most `wait_minutes` (180) per part: an older g
 SAID = re.compile(r"([\w.-]+): waiting for (.+)")
 
 
+def gone(run: Path) -> bool:
+    """A run whose gate died: its `gate.pid` names a process that is gone, or one started after the file was written
+    (the pid reused). A killed gate leaves its `waiting for` lines; they are no waits. No `gate.pid`: not known gone."""
+    try:
+        f = run / "gate.pid"
+        pid, written = re.search(r"^pid (\d+)$", f.read_text(encoding="utf-8"), re.M), f.stat().st_mtime
+    except OSError:
+        return False
+    if not pid:
+        return False
+    pid = int(pid[1])
+    if os.name != "nt":
+        try:
+            os.kill(pid, 0)  # signal 0: a check, not a signal (on Windows it would end the process)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        return False
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.restype = ctypes.c_void_p
+    handle = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ctypes.get_last_error() != 5  # access denied: it is there
+    code, times = ctypes.c_ulong(), [wintypes.FILETIME() for _ in range(4)]
+    try:
+        k32.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code))
+        timed = k32.GetProcessTimes(ctypes.c_void_p(handle), *(ctypes.byref(t) for t in times))
+    finally:
+        k32.CloseHandle(ctypes.c_void_p(handle))
+    born = ((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime) / 1e7 - 11644473600 if timed else None
+    return code.value != 259 or (born is not None and born > written + 2)  # 259: STILL_ACTIVE; 2 s: the clocks' grain
+
+
 def waits(ci: Path, now_ms: float) -> list[tuple[str, str, str, float]]:
     """(run, part, what, when said) for each part of a running gate whose last word is a `waiting for` line in its
     `gate.log`: no `$ <part>` (its command started) since, no verdict written since, the log under WAIT_MIN old. Only
@@ -141,7 +177,7 @@ def waits(ci: Path, now_ms: float) -> list[tuple[str, str, str, float]]:
         if not (d.is_dir() and re.fullmatch(r"[0-9a-f]{8}(\.only)?", d.name) and log.is_file()):
             continue
         t, verdict = log.stat().st_mtime, ci / f"{d.name}.json"
-        if now_ms / 1000 - t > WAIT_MIN * 60 or (verdict.is_file() and verdict.stat().st_mtime >= t):
+        if now_ms / 1000 - t > WAIT_MIN * 60 or (verdict.is_file() and verdict.stat().st_mtime >= t) or gone(d):
             continue
         said: dict[str, str] = {}
         for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -269,6 +305,11 @@ def selftest() -> int:
         (work / "ci" / "deadbeef" / "gate.log").write_text(
             "e2e: waiting for e2e or e2e2, held by ci-x since 1 and ci-y since 2\nunit: waiting for 3 of 3 cpu slots\n"
             "$ unit\n", encoding="utf-8")
+        (work / "ci" / "deadbeef" / "gate.pid").write_text(f"pid {os.getpid()}\n", encoding="utf-8")  # alive: kept
+        dead = Path(tmp) / "w2" / "ci" / "0badc0de"  # a killed gate: its pid is gone (no real pid is that odd high)
+        dead.mkdir(parents=True)
+        (dead / "gate.log").write_text("unit: waiting for 1 of 1 cpu slots\n", encoding="utf-8")
+        (dead / "gate.pid").write_text("pid 4194303\nsession ses_x\n", encoding="utf-8")
         for i in range(7):
             g = {"verdict": "GREEN" if i else "NEW-RED", "parts": [{"new": [{"id": "e2e/a.spec.ts::b"}] if i == 0 else []}]}
             f = work / "ci" / f"{i:08x}.json"
@@ -315,6 +356,7 @@ def selftest() -> int:
             "locks": "e2e.lock RV16" in flat and "perf.lock.d LANE2" in flat,
             "a gate waiting": "waiting: deadbeef e2e: e2e or e2e2, held by ci-x and ci-y (0m)" in flat,
             "a started part no longer waits": "cpu slots" not in flat,
+            "a dead gate's waits dropped": waits(dead.parent, now) == [],
             "deploy FAIL in locks": "deploy FAIL cafef00d at 13:05" in flat,
             "busy child": "BUSY" in flat and "LANE1 build" in flat,
             "idle child with outcome": "succeeded" in flat and "RV1 review" in flat,
