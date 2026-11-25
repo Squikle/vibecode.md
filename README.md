@@ -136,6 +136,7 @@ flowchart TB
 |---|---|---|
 | prompt-polish, pacer, ctxpick, todo (news) | `templates/opencode-global/` (your OpenCode config, not the project) | 34, 33, 35, 47 |
 | coord-beat, review-pack | `tools/work/` | 32, 26 |
+| merge cause (`cause.py`, `merge-log.py --from`), cache-ttl, tokens-since, union | `tools/work/` | 46, 51 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
 | vaultify and its git hook | `tools/vault/` | 28 |
 | rtk, compaction config | `AGENTS.md`; the compaction snippet from `deploy.py --global` | 10, 17, 36 |
