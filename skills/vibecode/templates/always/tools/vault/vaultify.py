@@ -2,22 +2,32 @@
 """The docs of a git revision -> an Obsidian vault (any version; plain Markdown and frontmatter). Zero LLM, stdlib only.
 
 python -I -X utf8 tools/vault/vaultify.py [--rev origin/main] [--vault <dir>] [--repo <dir>] [--if-changed] [--src <dir>]
+python -I -X utf8 tools/vault/vaultify.py [--vault <dir>] --resolve <path>   (a conflict you merged by hand, taken back)
 
 Reads only git (`git archive <rev> docs AGENTS.md`); `--src <dir>` reads a plain folder instead (tests). Writes only under
-the vault (default `<main tree>/.work/vault`, git-ignored): `docs/**` mirrored, one note per batch (`batches/`), decision
-(`decisions/`), open question and known red (`questions/`) and merge (`merges/`), the hub `index.md`, and
-`.vaultify/manifest.json` (path -> hash of what it last wrote) and `build.json` (the rev and this script's hash:
-`--if-changed` exits at once when both match). A note is rewritten only when its bytes change (the `rev:` line aside);
-one this script did not write, or that you edited since, is never overwritten or deleted (`kept_edited`).
+the vault (default `<main tree>/.work/vault`, git-ignored) and `vault-alert.json` next to it: `docs/**` mirrored, one note
+per batch (`batches/`), decision (`decisions/`), open question and known red (`questions/`) and merge (`merges/`), the hub
+`index.md`, `Now.md` once as a stub (`vault_now.py` writes it; never in the manifest, never deleted), and
+`.vaultify/manifest.json` (path -> hash of what it last wrote or merged), `base/` and `conflicts/` (vault_merge.py) and
+`build.json` (the rev and the hash of this folder's scripts: `--if-changed` exits at once when both match). A file is
+rewritten only when its bytes change (the `rev:` line and the hub's build time aside); one you edited since gets the new
+docs by a 3-way merge, or is a conflict: left as it is, parked, counted, shown at the hub's top and in the alert.
 Parsed shapes are the template's: the tables of BACKLOG, DECISIONS and QUESTIONS, MERGES' `### date · batch · sha`
 entries, and `docs/specs/**/<id>.md`. A row of a parsed doc that fits no shape is a miss (`miss:` lines on stderr):
-the librarian fixes the row or this script. Prints one JSON line (`written`, `deleted`, `kept_edited`, `misses`, ...);
-exit 1 when misses > 0, 2 on bad arguments. `tools/ci/gate.py ship` and `tools/vault/hook.py` run it.
+the librarian fixes the row or this script. Prints one JSON line (`written`, `merged`, `conflicts`, `deleted`, `misses`,
+...); exit 1 when misses or conflicts > 0, 2 on bad arguments. `tools/ci/gate.py ship` and `tools/vault/hook.py` run it.
 """
-import argparse, hashlib, io, json, re, subprocess, sys, tarfile, tempfile, time
+import argparse, io, json, re, subprocess, sys, tarfile, tempfile, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))              # `python -I` leaves the script's folder off sys.path
+from vault_merge import NO_WINDOW, Sync, alert, alert_path, callout, h12, resolve as take_back, stable   # noqa: E402,F401
+
+HUB, NOW = "index.md", "Now.md"
+NOW_STUB = ('---\ntags:\n  - "vault/now"\n---\n# Now\n\nThe coordinator\'s jobs show here once '
+            '`tools/vault/vault_now.py` has run (`tools/vault/README.md`).\n')
 TABLES = {  # doc -> (the header's first cells, the note folder) for each table it holds
     "docs/BACKLOG.md": [(("#", "Batch"), "batches")],
     "docs/DECISIONS.md": [(("#", "Decision"), "decisions")],
@@ -27,17 +37,12 @@ MERGE = re.compile(r"^### (\d{4}-\d\d-\d\d(?:[ T]\d\d:\d\d)?) \S (.+?) \S ([0-9a
 ID = re.compile(r"`([\w.-]+)`")
 
 
-def h12(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()[:12]
-
-
-def stable(data: bytes) -> bytes:
-    """A note's bytes without its `rev:` line: a new rev alone rewrites nothing."""
-    return re.sub(rb"(?m)^rev: .*\n", b"", data)
-
-
 def git(repo, *args) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True)
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, creationflags=NO_WINDOW)
+
+
+def tool_hash() -> str:
+    return h12(b"".join(p.name.encode() + p.read_bytes() for p in sorted(HERE.glob("*.py"))))
 
 
 def slug(text: str) -> str:
@@ -158,45 +163,12 @@ class Build:
         groups = {}
         for rel in self.out:
             groups.setdefault(rel.split("/")[0] if "/" in rel else "top", []).append(rel)
-        hub = [f"# The docs at {self.rev}", "", f"Built {time.strftime('%Y-%m-%d %H:%M')}; misses {len(self.miss)}.", ""]
+        hub = [f"# The docs at {self.rev}", "", f"Built {time.strftime('%Y-%m-%d %H:%M')}; misses {len(self.miss)}.", "",
+               "![[Now]]", ""]
         for g in ("batches", "merges", "decisions", "questions", "docs", "top"):
             if g in groups:
                 hub += [f"## {g} ({len(groups[g])})", ""] + [f"- [[{r[:-3]}]]" for r in sorted(groups[g])[:200]] + [""]
-        self.out["index.md"] = ("\n".join(hub) + "\n").encode("utf-8")
-
-
-def reconcile(vault: Path, out: dict):
-    """Write what changed, keep what is not ours or was edited, delete what vanished. Returns the counts."""
-    mp = vault / ".vaultify" / "manifest.json"
-    old = json.loads(mp.read_text(encoding="utf-8")) if mp.is_file() else {}
-    new, written, kept, deleted = {}, 0, 0, 0
-    for rel, data in out.items():
-        p = vault / rel
-        if p.is_file():
-            cur = p.read_bytes()
-            if stable(cur) == stable(data) and rel != "index.md":
-                new[rel] = h12(cur)
-                continue
-            if old.get(rel) != h12(cur):  # ours but edited, or never ours: leave it alone
-                kept += 1
-                if rel in old:
-                    new[rel] = old[rel]
-                continue
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(data)
-        new[rel], written = h12(data), written + (rel != "index.md")
-    for rel, hsh in old.items():
-        p = vault / rel
-        if rel in out or not p.is_file():
-            continue
-        if h12(p.read_bytes()) == hsh:
-            p.unlink()
-            deleted += 1
-        else:
-            kept += 1
-    mp.parent.mkdir(parents=True, exist_ok=True)
-    mp.write_text(json.dumps(new, sort_keys=True, indent=0) + "\n", encoding="utf-8")
-    return written, deleted, kept
+        self.out[HUB] = ("\n".join(hub) + "\n").encode("utf-8")
 
 
 def source_tree(repo, rev: str, tmp: str):
@@ -224,9 +196,14 @@ def main(argv=None) -> int:
     ap.add_argument("--repo", default=str(HERE.parents[1]))
     ap.add_argument("--if-changed", action="store_true")
     ap.add_argument("--src", help="test hook: a plain folder instead of git")
+    ap.add_argument("--resolve", metavar="PATH", help="a conflict merged by hand: take the file back (`.vaultify/conflicts/`)")
     a = ap.parse_args(argv)  # an unknown argument exits 2
     t0 = time.perf_counter()
-    tool = h12(Path(__file__).read_bytes())
+    tool = tool_hash()
+    if a.resolve:
+        code, res = take_back(vault_dir(a), a.resolve)
+        print(json.dumps(res))
+        return code
     if a.src:
         rev = "src"
     else:
@@ -234,31 +211,44 @@ def main(argv=None) -> int:
         if r.returncode:
             raise SystemExit("git rev-parse failed: " + r.stderr.decode("utf-8", "replace").strip())
         rev = r.stdout.decode().strip()
-    if a.vault:
-        vault = Path(a.vault).resolve()
-    else:
-        common = git(a.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.decode().strip()
-        vault = (Path(common).parent if common else Path(a.repo)) / ".work" / "vault"
+    vault = vault_dir(a)
     state = vault / ".vaultify" / "build.json"
     if a.if_changed and not a.src and state.is_file():
         last = json.loads(state.read_text(encoding="utf-8"))
         if last.get("rev") == rev and last.get("tool") == tool:
             print(json.dumps({"rev": rev, "skipped": True, "written": 0, "misses": 0}))
-            return 0
+            return 1 if alert_path(vault).is_file() else 0
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(a.src) if a.src else Path(tmp)
         if not a.src:
             source_tree(a.repo, rev, tmp)
         b = Build(root, rev)
         b.run()
-    written, deleted, kept = reconcile(vault, b.out)
+    sync = Sync(vault)
+    for rel, data in b.out.items():
+        if rel != HUB:
+            sync.put(rel, data)
+    warn = callout(sorted({*sync.conflicts, *sync.vanished(b.out)}), b.miss, vault).encode("utf-8")
+    sync.put(HUB, b.out[HUB].replace(b"\n\n", b"\n\n" + warn + b"\n", 1) if warn else b.out[HUB])   # last: its warning
+    sync.finish(b.out)                                                                               # names this build's
+    if not (vault / NOW).exists():
+        (vault / NOW).write_text(NOW_STUB, encoding="utf-8")
     state.write_text(json.dumps({"rev": rev, "tool": tool}) + "\n", encoding="utf-8")
-    for x in b.miss[:8]:
-        print(f"miss: {x}", file=sys.stderr)
+    alert(vault, rev, sync.conflicts, b.miss)
+    for kind, items in (("miss", b.miss), ("conflict", sync.conflicts)):
+        for x in items[:8]:
+            print(f"{kind}: {x}", file=sys.stderr)
     print(json.dumps({"rev": rev, "skipped": False, "seconds": round(time.perf_counter() - t0, 2), "files": len(b.out),
-                      "written": written, "deleted": deleted, "kept_edited": kept, "misses": len(b.miss),
-                      "batches": len(b.batches)}))
-    return 1 if b.miss else 0
+                      "written": sync.written, "merged": sync.merged, "conflicts": len(sync.conflicts),
+                      "deleted": sync.deleted, "misses": len(b.miss), "batches": len(b.batches)}))
+    return 1 if b.miss or sync.conflicts else 0
+
+
+def vault_dir(a) -> Path:
+    if a.vault:
+        return Path(a.vault).resolve()
+    common = git(a.repo, "rev-parse", "--path-format=absolute", "--git-common-dir").stdout.decode().strip()
+    return (Path(common).parent if common else Path(a.repo)) / ".work" / "vault"
 
 
 if __name__ == "__main__":

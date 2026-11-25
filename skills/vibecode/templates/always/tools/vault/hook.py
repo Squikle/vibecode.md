@@ -147,12 +147,15 @@ def run(a):
         with redirect_stdout(out), redirect_stderr(err):
             vaultify.main(["--repo", ".", "--rev", "HEAD", "--vault", str(vault), "--if-changed"])
         res = json.loads(out.getvalue().strip().splitlines()[-1])
-        bad = res.get("misses", 0)
-        word = "skip" if res.get("skipped") else "miss" if bad else "ok"
-        lines = [f"{stamp} {a.name} {res['rev']} {word} " + " ".join(
-            f"{k}={res[k]}" for k in ("written", "deleted", "kept_edited", "misses", "seconds") if k in res)]
+        bad, clash = res.get("misses", 0), res.get("conflicts", 0)
+        word = "skip" if res.get("skipped") else "conflict" if clash else "miss" if bad else "ok"
+        lines = [f"{stamp} {a.name} {res['rev']} {word} " + " ".join(f"{k}={res[k]}" for k in (
+            "written", "merged", "conflicts", "deleted", "misses", "seconds") if k in res)]
         lines += ["  " + l for l in err.getvalue().splitlines()]
-        if bad:
+        if clash:                                           # your edits kept, the new docs parked: the coordinator sees it
+            say = (f"vault: {clash} conflict{'s' if clash != 1 else ''} (your edits kept, the new docs in "
+                   f"{vault / '.vaultify' / 'conflicts'}), {bad} miss: see {vault.parent / 'vault-alert.json'}")
+        elif bad:
             say = f"vault: {res.get('misses', 0)} miss: see {log} (the librarian fixes the doc row or vaultify)"
     except BaseException as e:                              # SystemExit from git included: a hook never fails git
         if isinstance(e, KeyboardInterrupt):

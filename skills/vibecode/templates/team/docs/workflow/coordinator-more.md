@@ -16,6 +16,8 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 - **The rowless path:** a docs or tools pass with no rows, report or `NEW` decision whose head already holds `origin/main` skips `integrate.py`: `gate.py run <head>` → `git merge --ff-only <head>` in the main worktree → `gate.py ship <head>`. Ship needs the main worktree at the gated sha (`FAIL tree`). An ff that refuses has changed nothing: stop, never `reset`.
 - **One integrator on the main worktree at a time;** a new one only after the last retired; you don't merge while one holds it.
 - **A chain merges as one;** so does a stacked pair where the first alone is red: back to back, one ship after both.
+- **A row built in several lanes** merges lane by lane, `--batch <row>-a`, `<row>-b`, ...; only the last lane merges as `<row>`, so ship checks its ROADMAP mark only then.
+- **Planner and CTO passes** merge by a plain `git merge --no-ff <branch>` and the docs test (`tools/work/check-docs.py`), not `integrate.py`.
 - **Hold a refactor that moves shared files** while batches touching those files are in review.
 - **After a ship:** `new-flaky=` in the `SHIP` line goes into `tools/ci/known-reds.json` and `docs/QUESTIONS.md` (the next integrator or lane lists it); `vault=<written>/<misses>` with misses over 0 queues the librarian.
 
@@ -27,9 +29,11 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 
 No new feature lanes → CTO health sweep → the planner orders the refactor rows (🔴 first) → executors build them (no behaviour change) → librarian pass → features again. The integrator's size line tells you when a doc is over budget (queue the librarian) or a file is over its limit (the CTO).
 
+**A doc near its cap is trimmed, never the cap raised** (that is the owner's word only): plan a librarian docs-only lane at ~97 % of the cap.
+
 ## 5. The checkpoint and the handover
 
-- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions with role, batch and id; machines; next moves), rewritten at every checkpoint. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
+- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions as a table, `| Role | Tag | Session | Batch | Next |`, which `tools/vault/vault_now.py` turns into the vault's Now note; machines; next moves), rewritten at every checkpoint. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
 - **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, ask the owner for `/pacer on` in this session, adopt the running children, carry on with the next moves." When the owner asks for that prompt, show it; they start the session.
 - **The old coordinator goes idle first:** two coordinators both spawn.
 - **Adopt the children:** a background result goes to the session that spawned it. Send each running child one line with your session id ("report to me from now on; carry on"). Until you have children of your own, run `coord-beat.py --parent <old id>`.
@@ -60,6 +64,8 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **Lane cap = the pacer's mode** when it is on (`/pacer`; the kit's `opencode-global/pacer.md`): BURST ≤ 7, GO ≤ 5, EASE ≤ 3, SLOW ≤ 2, HOLD and LIMITED none new; never over {{EXECUTORS}}. Helpers, the planner, the CTO and the librarian don't count.
 - **On a `[pacer ...] MODE ...` line:** answer in 2 lines and spawn within the new cap.
+- **Usage check:** at each MODE line, and before a burst of spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder).
+- **Gate cap:** no fresh builder while 4 or more gates run. A gate queued on a lock uses ~0 CPU, but one browser part on a software renderer uses ~10 cores (the source project's machines).
 - **Keep-alive** every 50-55 minutes for a child waiting idle (`#1`): past ~60 minutes it is cold.
 - **Heartbeat** (`#3`); **every third beat** a peek sweep: `session-audit.py --peek` (one line per running child).
 - **One integrator at a time, in the main worktree**; parallel lanes whenever nothing blocks.
@@ -68,6 +74,7 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **Who runs which gate:** once per batch, in full, `gate.py run <head> --base <sha it was cut from>`: the reviewer for a reviewed batch, after its fixes; else the executor. A red is rerun alone (`--only <file>[:line] ...`). A full gate can take hours: one foreground call, the longest timeout. Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
 - **Stacks and locks:** `--config <json>` picks a machine set; each set has its own lock name. **No cancel:** kill only your own test tree and free only your own lock.
+- **Keep the second test machine busy:** a gate whose browser part has waited 30+ minutes for a stack, its other parts done: run that part on the other machine (`--parts <part>` with that machine's config) and kill the waiting gate's tree. A new commit supersedes your own running gate: kill its tree too.
 - **Stacked merges ship under one full gate** (`#2`). **Mixed line endings** merge only through `tools/work/eolmerge.py`.
 - **Every merge names its cause:** `merge-log.py --from '<why>'` (single quotes), else it refuses with `NO CAUSE`; `cause.py` checks one. A batch with no spec carries a `From:` line in its report (the owner's word with a date, or the parent batch).
 - **Merges** stamp times from the real clock (`Get-Date` / `date`), never a guess.
