@@ -3,7 +3,8 @@
 
 One call instead of five: the pacer's usage line (`pacer.py status --json` from the opt-in kit, skipped when missing), the latest
 gate verdict per sha (`.work/ci/<sha8>.json` and `.only.json`, and a run folder with no verdict yet), the machine
-locks (`.work/<name>.lock` or `.lock.d`: holder and age; a running or failed autodeploy too), the coordinator's child sessions with how long each has
+locks (`.work/<name>.lock` or `.lock.d`: holder and age; a running or failed autodeploy too), the gates waiting for a
+lock or a CPU slot (the `waiting for` lines of each run's `gate.log`), the coordinator's child sessions with how long each has
 been quiet (the opencode database read-only for the children; with no database, `opencode session list --format
 json` for the top level), and the head of `.work/integrator-queue.md`.
 
@@ -126,6 +127,38 @@ def locks(work: Path, now_ms: float) -> list[str]:
     return ["locks: " + " | ".join(parts)]
 
 
+WAIT_MIN = 240  # a gate waits at most `wait_minutes` (180) per part: an older gate.log is no live wait
+SAID = re.compile(r"([\w.-]+): waiting for (.+)")
+
+
+def waits(ci: Path, now_ms: float) -> list[tuple[str, str, str, float]]:
+    """(run, part, what, when said) for each part of a running gate whose last word is a `waiting for` line in its
+    `gate.log`: no `$ <part>` (its command started) since, no verdict written since, the log under WAIT_MIN old. Only
+    the gate's own log counts: a run on another machine, or a hand run, is no local waiter."""
+    rows = []
+    for d in sorted(ci.iterdir()) if ci.is_dir() else []:
+        log = d / "gate.log"
+        if not (d.is_dir() and re.fullmatch(r"[0-9a-f]{8}(\.only)?", d.name) and log.is_file()):
+            continue
+        t, verdict = log.stat().st_mtime, ci / f"{d.name}.json"
+        if now_ms / 1000 - t > WAIT_MIN * 60 or (verdict.is_file() and verdict.stat().st_mtime >= t):
+            continue
+        said: dict[str, str] = {}
+        for line in log.read_text(encoding="utf-8", errors="replace").splitlines():
+            if m := SAID.fullmatch(line.strip()):
+                said[m[1]] = re.sub(r" since \S+", "", m[2])
+            elif line.startswith("$ "):
+                said.pop(line[2:].strip(), None)
+        rows += [(d.name, k, v, t) for k, v in said.items()]
+    return rows
+
+
+def waiting(ci: Path, now_ms: float) -> list[str]:
+    """`waiting:` each waiting part (`waits`) with how long ago it said so; or `waiting: none`."""
+    rows = [f"{run} {part}: {what} ({ago(t * 1000, now_ms)})" for run, part, what, t in waits(ci, now_ms)]
+    return ["waiting: " + (" | ".join(rows) if rows else "none")]
+
+
 def deploy(d: Path, now_ms: float) -> list[str]:
     """Autodeploy (`tools/ci/autodeploy.py`, opt-in): a running deploy and a failed last one; nothing when quiet."""
     out = []
@@ -222,7 +255,7 @@ def queue(path: Path) -> list[str]:
 
 
 def beat(work: Path, parent: str | None, now_ms: float, top=None, db=None) -> list[str]:
-    out = pacer() + gates(work / "ci", now_ms) + locks(work, now_ms)
+    out = pacer() + gates(work / "ci", now_ms) + locks(work, now_ms) + waiting(work / "ci", now_ms)
     out += sessions(parent, now_ms, top, db) + queue(work / "integrator-queue.md")
     return out[:MAX_LINES]
 
@@ -233,6 +266,9 @@ def selftest() -> int:
         work = Path(tmp) / ".work"
         (work / "ci" / "deadbeef").mkdir(parents=True)
         (work / "ci" / "deadbeef" / "unit.log").write_text("x", encoding="utf-8")
+        (work / "ci" / "deadbeef" / "gate.log").write_text(
+            "e2e: waiting for e2e or e2e2, held by ci-x since 1 and ci-y since 2\nunit: waiting for 3 of 3 cpu slots\n"
+            "$ unit\n", encoding="utf-8")
         for i in range(7):
             g = {"verdict": "GREEN" if i else "NEW-RED", "parts": [{"new": [{"id": "e2e/a.spec.ts::b"}] if i == 0 else []}]}
             f = work / "ci" / f"{i:08x}.json"
@@ -277,6 +313,8 @@ def selftest() -> int:
             "a new red named": "00000000 NEW-RED" in flat and "a.spec.ts" in flat,
             "full verdict over --only": "00000001 GREEN" in flat and "--only" not in flat,
             "locks": "e2e.lock RV16" in flat and "perf.lock.d LANE2" in flat,
+            "a gate waiting": "waiting: deadbeef e2e: e2e or e2e2, held by ci-x and ci-y (0m)" in flat,
+            "a started part no longer waits": "cpu slots" not in flat,
             "deploy FAIL in locks": "deploy FAIL cafef00d at 13:05" in flat,
             "busy child": "BUSY" in flat and "LANE1 build" in flat,
             "idle child with outcome": "succeeded" in flat and "RV1 review" in flat,

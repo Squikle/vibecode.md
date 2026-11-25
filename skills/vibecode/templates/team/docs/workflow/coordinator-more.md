@@ -16,6 +16,9 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 - **The rowless path:** a docs or tools pass with no rows, report or `NEW` decision whose head already holds `origin/main` skips `integrate.py`: `gate.py run <head>` → `git merge --ff-only <head>` in the main worktree → `gate.py ship <head>`. Ship needs the main worktree at the gated sha (`FAIL tree`). An ff that refuses has changed nothing: stop, never `reset`.
 - **One integrator on the main worktree at a time;** a new one only after the last retired; you don't merge while one holds it.
 - **A chain merges as one;** so does a stacked pair where the first alone is red: back to back, one ship after both.
+- **Decision numbers:** `integrate.py` numbers only `NEW` rows; a lane that numbered its own can clash with main's. Before the merge, check `docs/DECISIONS.md` for a repeat; renumber the lane's, commit messages too.
+- **A clean merge-tree is no semantic check:** grep what main added since the lane was cut for new cases of its pattern (a mark put on every button misses one a parallel batch added); a source-scan unit test holds them all.
+- **A report's shas are the merged ones:** after a rebase, a rollback commit it names gets its new sha.
 - **A row built in several lanes** merges lane by lane, `--batch <row>-a`, `<row>-b`, ...; only the last lane merges as `<row>`, so ship checks its ROADMAP mark only then.
 - **Planner and CTO passes** merge by a plain `git merge --no-ff <branch>` and the docs test (`tools/work/check-docs.py`), not `integrate.py`.
 - **Hold a refactor that moves shared files** while batches touching those files are in review.
@@ -23,7 +26,7 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 
 ## 3. The heartbeat in one call
 
-`python -I -X utf8 tools/work/coord-beat.py` prints at most 25 lines: the newest gate verdicts, the machine locks, your children with how long each has been quiet (opencode's database read-only, else its CLI list), and the integrator queue's head. Read-only; one call instead of five.
+`python -I -X utf8 tools/work/coord-beat.py` prints at most 25 lines: the newest gate verdicts, the machine locks, the gates waiting for a lock or slot, your children with how long each has been quiet (opencode's database read-only, else its CLI list), and the integrator queue's head. Read-only; one call instead of five.
 
 ## 4. Clean stages
 
@@ -64,8 +67,8 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **Lane cap = the pacer's mode** when it is on (`/pacer`; the kit's `opencode-global/pacer.md`): BURST ≤ 7, GO ≤ 5, EASE ≤ 3, SLOW ≤ 2, HOLD and LIMITED none new; never over {{EXECUTORS}}. Helpers, the planner, the CTO and the librarian don't count.
 - **On a `[pacer ...] MODE ...` line:** answer in 2 lines and spawn within the new cap.
-- **Usage check:** at each MODE line, and before a burst of spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder).
-- **Gate cap:** no fresh builder while 4 or more gates run. A gate queued on a lock uses ~0 CPU, but one browser part on a software renderer uses ~10 cores (the source project's machines).
+- **Usage check:** at each MODE line, before a burst and between fresh spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder). The 5-hour window up more than ~15 points in 30 minutes: drop one mode.
+- **Gate cap:** no fresh builder while 4 or more gates run. A gate queued on a lock or a CPU slot uses ~0 CPU; `gate.py`'s slots hold back the rest.
 - **Keep-alive** every 50-55 minutes for a child waiting idle (`#1`): past ~60 minutes it is cold.
 - **Heartbeat** (`#3`); **every third beat** a peek sweep: `session-audit.py --peek` (one line per running child).
 - **One integrator at a time, in the main worktree**; parallel lanes whenever nothing blocks.

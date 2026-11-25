@@ -22,7 +22,7 @@ python tools/ci/gate.py run <sha> --stack 2     # each locked part on the 2nd lo
     An unlisted red green alone 2 of 2 is named **new-flaky** (in the line, the json and the ship's line): whoever ships
     lists it in `known-reds.json` as a `flake` with its `docs/QUESTIONS.md` row.
   - `NEW-RED`: a red the batch owns.
-  - `WAITED`: a part's lock stayed held past `wait_minutes` (180) and the part never ran: `WAITED e2e: 180 min for e2e,
+  - `WAITED`: a part's lock or CPU slot stayed taken past `wait_minutes` (180) and the part never ran: `WAITED e2e: 180 min for e2e,
     held by <who> since <time>` under the line. No test counted red; run again when the holder is done. A wait of the
     runs alone does the same: their reds are `unjudged` (`e2e 5/2 (known 1, waited 1, new 0)`), never NEW.
   - `BUSY`: a `heavy` part was skipped (a listed process runs). Run again later.
@@ -34,11 +34,19 @@ python tools/ci/gate.py run <sha> --stack 2     # each locked part on the 2nd lo
   it holds it, so a wait of any length leaves it its whole budget. The wait has its own limit, `wait_minutes`. While it
   waits, the console (stderr) says who holds it and since when, once per holder: `e2e: waiting for e2e, held by
   lane-b since 2026-11-24T10:00:00`. Its own hold is kept fresh, so a part longer than `lock_minutes` is never taken
-  over as stale. Its command gets `CI_LOCK_HELD`, so `tools/work/lock.ps1`/`lock.sh` inside it run without waiting.
-- **Stacks:** a part whose `lock` is a list (`["e2e", "e2e2"]`: two copies of a test stack) runs on the first; `{lock}`
-  and `{stack}` (1, 2) in its commands, and `CI_LOCK`/`CI_STACK`, say which it got. A `--only` run takes the first
-  free one by itself (`MOVED e2e: e2e held by ...: ran on e2e2` under the line); both held, the first freed. The
-  full gate and a ship's never move. `--stack N` pins the Nth (a part with fewer keeps its first).
+  over as stale; a stale one is dropped only while it is still the hold judged stale. It frees only its own hold (a
+  timeout too). Its command gets `CI_LOCK_HELD`, so `tools/work/lock.ps1`/`lock.sh` inside it run without waiting.
+- **CPU admission:** each local part not marked `light` runs in one of `cpu_slots` (3) slots, and beside another
+  such run only with the CPU under `cpu_max` (90%); a `renderer: "software"` part (a browser drawing on the CPU, as in
+  a container) first takes one of `software_slots` (1). Slots are `.work/ci/cpu|software/slot<k>`; a dead gate's slot
+  (pid gone or reused) is taken over. The wait counts as the wait (`wait_minutes`, WAITED), not the part's `timeout`.
+  Remote parts take none. Why: in the source project too many gates at once turned into timeout reds (`gate.py`).
+- **Waits on record:** each wait and each command's start (`$ <part>`) also go to `.work/ci/<sha8>/gate.log`;
+  `coord-beat.py` shows the live ones as its `waiting:` line.
+- **Stacks:** a part whose `lock` is a list (`["e2e", "e2e2"]`: two copies of a test stack) takes the first free one,
+  first tried first (`MOVED e2e: e2e held by ...: ran on e2e2` under the line); both held, the first freed. `{lock}`
+  and `{stack}` (1, 2) in its commands, and `CI_LOCK`/`CI_STACK`, say which it got. `--stack N` pins the Nth (a part
+  with fewer keeps its first).
 - **Results:** `.work/ci/<sha8>.json` (parts, reds, skipped, `line`, `shipped`) and the logs in `.work/ci/<sha8>/`, in the
   main checkout. Read the line or `status`; open a log only for a red you fix, and then its tail.
 
@@ -56,13 +64,15 @@ The `bootstrap` batch fills each `cmd`. A part:
 | `timeout` | minutes; past it the part's process tree is killed and the part is ERROR |
 | `lock` | a machine lock name (the same `.work/<name>.lock` as `tools/work/lock.ps1` / `lock.sh`), or a list of them (stacks, above); waits up to `wait_minutes` |
 | `heavy` | BUSY instead of a run while a process in `busy.processes` runs (a game, a render, another benchmark) |
+| `light` | takes no CPU slot (a type check, a lint: little CPU) |
+| `renderer` | a browser part's: `software` (takes a software slot), `gpu`, or `any` (no browser; the default). A known red's `renderer` limits it to those parts |
 | `docker` | run inside the compose service (`docker.compose`, `docker.service`), the export mounted at `/src` |
 | `remote` | run on the second machine over ssh (`remote`: `name`, `ssh`, `repo`, `git`); the sha is pushed there first |
 
-Top level: `base`, `lock_minutes` (50: a hold older is stale), `wait_minutes` (180: a longer wait is WAITED), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
+Top level: `base`, `lock_minutes` (50: a hold older is stale), `wait_minutes` (180: a longer wait is WAITED), `cpu_slots`, `cpu_max`, `software_slots` (above; 0 slots: off), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
 diff that redeploys nothing), `ship.deploy` (the command that redeploys the owner's app), `ship.health` (a URL that
 must answer 200 after it). This machine's overrides go in `.work/ci/machine.json` (git-ignored, merged over `ci.json`):
-`name`, `busy`, `remote`, `ship`, `autodeploy` (below), `timeouts` per part.
+`name`, `busy`, `remote`, `ship`, `autodeploy` (below), `timeouts` per part, the slot keys.
 
 Most runners write JUnit with one flag: pytest `--junitxml`, vitest/jest/Playwright a `junit` reporter, `go test` via
 `go-junit-report`, cargo-nextest `--profile ci`. Write it under `.work/junit/` so it never lands in git.

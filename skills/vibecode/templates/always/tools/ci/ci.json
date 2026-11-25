@@ -3,12 +3,15 @@
  "base": "origin/main",
  "lock_minutes": 50,
  "wait_minutes": 180,
+ "cpu_slots": 3,
+ "cpu_max": 90,
+ "software_slots": 1,
  "setup": "",
  "docs_only": ["docs/*", "*.md"],
  "parts": [
-  {"name": "types", "cmd": "", "paths": ["*"], "timeout": 10},
+  {"name": "types", "cmd": "", "paths": ["*"], "light": true, "timeout": 10},
   {"name": "unit", "cmd": "", "paths": ["*"], "junit": ".work/junit/unit*.xml", "timeout": 20}<!-- if:e2e -->,
-  {"name": "e2e", "cmd": "", "paths": ["*"], "junit": ".work/junit/e2e*.xml", "lock": "e2e", "timeout": 60}<!-- endif --><!-- if:perf -->,
+  {"name": "e2e", "cmd": "", "paths": ["*"], "junit": ".work/junit/e2e*.xml", "lock": "e2e", "renderer": "any", "timeout": 60}<!-- endif --><!-- if:perf -->,
   {"name": "perf", "cmd": "", "paths": ["*"], "lock": "e2e", "heavy": true, "timeout": 30}<!-- endif -->
  ],
  "busy": {"processes": []},

@@ -12,12 +12,19 @@ Usage (from main's worktree): python -I -X utf8 tools/work/integrate.py <branch>
 - Numbers each `| NEW |` decision in docs/DECISIONS.md after the highest number.
 - Commits the merge: "Merge <branch>: <ids>."
 """
-import pathlib, re, subprocess, sys
+import argparse, pathlib, re, subprocess, sys
+
+# Parsed before anything runs: a `-h` once read as a branch name and the merge went on.
+_ap = argparse.ArgumentParser(prog="integrate.py", description="Merge a finished batch branch into the checked-out "
+                              "main and do the bookkeeping (BACKLOG, specs, HANDOVER, the report, DECISIONS).")
+_ap.add_argument("branch", help="the batch branch to merge")
+_ap.add_argument("ids", nargs="+", metavar="id", help="a batch id the branch completes (its .work/<id>/report.md)")
+_args = _ap.parse_args()
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))  # `python -I` leaves it off
 from cause import HAS_CAUSE  # noqa: E402
 
-branch, ids = sys.argv[1], sys.argv[2:]
+branch, ids = _args.branch, _args.ids
 
 
 def git(*a, check=True):

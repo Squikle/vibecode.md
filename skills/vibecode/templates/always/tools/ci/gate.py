@@ -10,10 +10,11 @@ names the parts (test kinds), their commands, the paths that trigger each and wh
     python tools/ci/gate.py ship <sha> --batch <id> --what .. --try .. [--up ..] [--no-roadmap] [--dry-run]
 
 Verdicts: GREEN, KNOWN-RED (every red listed in known-reds.json, or green alone 2 of 2; 3 of 3 for a listed flake),
-NEW-RED, BUSY (a heavy part skipped: the machine is busy), WAITED (a lock stayed held `wait_minutes`: nothing ran),
-ERROR (the gate or a runner broke). Exit 0 only for the
+NEW-RED, BUSY (a heavy part skipped: the machine is busy), WAITED (a lock or a CPU slot stayed taken `wait_minutes`:
+nothing ran), ERROR (the gate or a runner broke). Exit 0 only for the
 first two. Stdlib only; Windows, macOS and Linux. Unknown arguments are an error (argparse), never guessed."""
 import argparse
+import ctypes
 import datetime
 import fnmatch
 import glob
@@ -38,7 +39,7 @@ QUIET_LINES = 15
 SHIPPABLE = ("GREEN", "KNOWN-RED")
 VERDICTS = ("GREEN", "KNOWN-RED", "BUSY", "WAITED", "NEW-RED", "ERROR")  # the worst found wins
 DEFAULTS = {"base": "origin/main", "lock_minutes": 50, "wait_minutes": 180, "parts": [], "busy": {"processes": []},
-            "docs_only": ["docs/*", "*.md"], "ship": {}}
+            "docs_only": ["docs/*", "*.md"], "ship": {}, "cpu_slots": 3, "cpu_max": 90, "software_slots": 1}
 LOG_TAIL = 40  # lines of a failed part's log kept in its error
 
 
@@ -116,7 +117,8 @@ def changed_files(sha: str, base: str) -> list[str]:
 def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only: list[str] | None,
                stack: int | None = None) -> dict:
     """The parts the diff (or `--parts`, `--only`) runs. A locked part's `try_locks`: `--stack N` its Nth lock (a part
-    with fewer keeps its first); a `--only` run all of them, the first free taken; else its first, never moved."""
+    with fewer keeps its first); else all of them, the first free taken (a full gate too: a free stack never idles
+    while a gate waits for a busy one)."""
     parts, skipped, why = [], [], {}
     known = {p["name"]: p for p in config["parts"]}
     if only:
@@ -163,8 +165,7 @@ def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only
         if p.get("lock"):
             p["locks"] = [p["lock"]] if isinstance(p["lock"], str) else list(p["lock"])
             n = len(p["locks"])
-            p["try_locks"] = ([p["locks"][stack - 1]] if stack and n >= stack else p["locks"] if mode == "only" and not stack
-                              else p["locks"][:1])
+            p["try_locks"] = [p["locks"][stack - 1]] if stack and n >= stack else p["locks"][:1] if stack else p["locks"]
     if stack and not any(len(p.get("locks", [])) >= stack for p in parts):
         raise SystemExit(f"--stack {stack}: no part of this run has a lock {stack} (a `lock` list in tools/ci/ci.json); "
                          "run without --stack")
@@ -190,9 +191,20 @@ WAIT_S = 10  # between two tries at a held lock, as `tools/work/lock.ps1` and `l
 TOUCH_S = 60  # how often a held lock's time is renewed: a part longer than `lock_minutes` is never taken as stale
 
 
-def say(text: str) -> None:
-    """A lock wait, live on the console (stderr: the status line and a quiet run's 15 lines stay on stdout)."""
-    print(text, file=sys.stderr, flush=True)
+SAY_LOG: list[Path] = []  # the running gate's `gate.log` (its waits and each command's start, read by coord-beat)
+
+
+def say(text: str, console: bool = True) -> None:
+    """A wait, live on the console (stderr: the status line and a quiet run's 15 lines stay on stdout), and a line
+    of the run's `gate.log`: `<part>: waiting for <what>`, then `$ <part>` once that part's command starts."""
+    if console:
+        print(text, file=sys.stderr, flush=True)
+    for log in SAY_LOG:
+        try:
+            with open(log, "a", encoding="utf-8") as out:
+                out.write(text + "\n")
+        except OSError:
+            pass
 
 
 def stamp() -> str:
@@ -206,12 +218,43 @@ def drop(path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def hold_text(path: Path) -> str:
+    """A lock's or slot's text (`<who> <time>`, a slot then `pid <n>`); "" when gone or unreadable."""
+    try:
+        return (path / "who" if path.is_dir() else path).read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+
+def drop_if(path: Path, seen: str) -> bool:
+    """Drops a lock or slot only while it is the hold judged stale (`seen`, its text): renamed away first and read
+    there, so a hold another caller took since is never the one dropped; such a hold is put back. Two waiters that
+    judged one stale hold: the first drops it and takes the place, the late one leaves the new hold alone."""
+    away = path.with_name(f"{path.name}.drop-{os.getpid()}-{threading.get_ident()}")
+    try:
+        os.rename(path, away)
+    except OSError:
+        return False
+    if hold_text(away) == seen:
+        drop(away)
+        return True
+    try:  # put back, never over a hold taken since (a folder: rename fails onto a full one; a file: a hard link fails)
+        if WINDOWS or away.is_dir():
+            os.rename(away, path)
+        else:
+            os.link(away, path)
+            away.unlink()
+    except OSError:
+        drop(away)  # a newer hold is in its place already
+    return False
+
+
 class Lock:
     """The same machine lock as `tools/work/lock.ps1` (`.work/<name>.lock`, a file) and `lock.sh` (`.work/<name>.lock.d`,
     a folder), holding `<who> <time>`. `names` are the stacks it may take, the first tried first: it holds the first
-    free one, taken by trying (never by looking first). A hold older than `lock_minutes` is stale and taken over; its
-    own hold is kept fresh; it frees only its own. The wait has its own limit, `wait_minutes` (WAITED past it): a
-    part's `timeout` starts once it holds the lock."""
+    free one, taken by trying (never by looking first). A hold older than `lock_minutes` is stale and taken over (only
+    that very hold: `drop_if`); its own hold is kept fresh; it frees only its own (a timeout too). The wait has its own
+    limit, `wait_minutes` (WAITED past it): a part's `timeout` starts once it holds the lock."""
 
     def __init__(self, config: dict, names: list[str], who: str, tag: str = ""):
         work = Path(config["main"]) / ".work"
@@ -219,24 +262,27 @@ class Lock:
         self.names = list(names)
         self.paths = [work / (f"{n}.lock" if WINDOWS else f"{n}.lock.d") for n in self.names]
         self.who, self.stale, self.wait_s = who, config["lock_minutes"] * 60, config["wait_minutes"] * 60
-        self.tag, self.name, self.path, self.moved = tag, None, None, ""
+        self.tag, self.name, self.path, self.moved, self.mine = tag, None, None, "", ""
         self.stop, self.toucher = threading.Event(), None
 
     def try_take(self, path: Path) -> bool:
         while True:
+            mine = f"{self.who} {stamp()}"
             try:
                 if WINDOWS:
                     fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.write(fd, f"{self.who} {stamp()}".encode())
+                    os.write(fd, mine.encode())
                     os.close(fd)
                 else:
                     path.mkdir()
-                    (path / "who").write_text(f"{self.who} {stamp()}\n")
+                    (path / "who").write_text(mine + "\n")
+                self.mine = mine
                 return True
             except FileExistsError:
+                seen = hold_text(path)  # read before its age: a hold taken since is then too young to drop
                 try:
                     if time.time() - path.stat().st_mtime > self.stale:
-                        drop(path)
+                        drop_if(path, seen)
                         continue
                 except FileNotFoundError:
                     continue
@@ -245,20 +291,16 @@ class Lock:
     @staticmethod
     def holder(path: Path) -> str:
         """`<who> since <time>`, read from a held lock."""
-        try:
-            text = (path / "who" if path.is_dir() else path).read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            return "someone"
-        who, _, at = text.strip().partition(" ")
-        return f"{who} since {at}" if at else who or "someone"
+        return since(hold_text(path))
 
     def held_by(self) -> str:
         """`e2e or e2e2, held by <who> since <time> and <who> since <time>`."""
         return f"{' or '.join(self.names)}, held by " + " and ".join(self.holder(p) for p in self.paths)
 
-    def take(self) -> str | None:
-        """None once it holds a lock; past `wait_minutes`, the wait's text (WAITED). Each new holder is said once."""
-        end, seen, first = time.monotonic() + self.wait_s, None, ""
+    def take(self, end: float | None = None) -> str | None:
+        """None once it holds a lock; past `end` (`wait_minutes` from now: a part's slots share it), the wait's text
+        (WAITED). Each new holder is said once."""
+        end, seen, first = end or time.monotonic() + self.wait_s, None, ""
         while True:
             for i, path in enumerate(self.paths):
                 if self.try_take(path):
@@ -292,8 +334,184 @@ class Lock:
             self.stop.set()
             if self.toucher:
                 self.toucher.join()
-            drop(self.path)
+            if hold_text(self.path) == self.mine:  # only its own hold: one taken over since stays
+                drop(self.path)
             self.path = None
+
+
+def since(text: str) -> str:
+    """`<who> since <time>` from a hold's text."""
+    who, _, at = (text.splitlines() or [""])[0].strip().partition(" ")
+    return f"{who} since {at}" if at else who or "someone"
+
+
+# ---------------------------------------------------------------- CPU admission
+# A part that loads this machine (any local part but a `light` one) runs only in one of `cpu_slots` (3) slots, and
+# while another such run goes on, only with the CPU under `cpu_max` (90) percent. A part whose browser draws in
+# software (`renderer` "software": WebGL on the CPU, as in a container) first takes one of `software_slots` (1), so it
+# waits holding nothing. Why (the source project, measured): one software browser run took ~10 of 16 cores; two at once
+# took 34-35 min with 37-41 load reds against 14.2 min alone, and its unit part's median grew 132/143/154 s with 0/1/2
+# other gates beside it, then 261 s with 3. `cpu_max` 90 is a guess. A remote part (another machine) takes no slot; nor
+# does the first run (the load is then not a gate's, and waiting would not end it). 0 slots: admission off.
+# A slot is `.work/ci/<cpu|software>/slot<k>` holding `<who> <time>` then `pid <n>`, taken by creating it; a slot whose
+# gate is dead (pid gone, or the pid reused: its process started after the slot was written) is taken over.
+
+CPU_S = 3.0  # the CPU's sample
+SLOT_STALE_S = 6 * 3600  # a slot older than this is dead even if its pid lives
+PID = re.compile(r"^pid (\d+)$", re.M)
+
+
+def cpu_percent(seconds: float = CPU_S) -> float:
+    """The machine's busy CPU over `seconds`, 0-100 (Windows: `GetSystemTimes`; else the 1-min load per core)."""
+    if not WINDOWS:
+        return min(100.0, os.getloadavg()[0] / (os.cpu_count() or 1) * 100)
+    from ctypes import wintypes
+
+    def times():
+        idle, kernel, user = (wintypes.FILETIME() for _ in range(3))
+        ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
+        value = [(t.dwHighDateTime << 32) | t.dwLowDateTime for t in (idle, kernel, user)]
+        return value[0], value[1] + value[2]  # kernel time includes the idle time
+    idle0, all0 = times()
+    time.sleep(seconds)
+    idle1, all1 = times()
+    return round(100.0 * (1 - (idle1 - idle0) / max(1, all1 - all0)), 1)
+
+
+def alive(pid: int) -> bool:
+    """Whether process `pid` runs (never signalled: `os.kill(pid, 0)` would end it on Windows)."""
+    if not WINDOWS:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.restype = ctypes.c_void_p
+    handle = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not handle:
+        return ctypes.get_last_error() == 5  # access denied: it is there
+    code = ctypes.c_ulong()
+    try:
+        k32.GetExitCodeProcess(ctypes.c_void_p(handle), ctypes.byref(code))
+    finally:
+        k32.CloseHandle(ctypes.c_void_p(handle))
+    return code.value == 259  # STILL_ACTIVE
+
+
+def started(pid: int) -> float | None:
+    """When process `pid` started (epoch seconds), or None when unknown (not Windows, no access, gone)."""
+    if not WINDOWS:
+        return None
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.OpenProcess.restype = ctypes.c_void_p
+    handle = k32.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return None
+    times = [wintypes.FILETIME() for _ in range(4)]  # creation, exit, kernel, user
+    try:
+        if not k32.GetProcessTimes(ctypes.c_void_p(handle), *(ctypes.byref(t) for t in times)):
+            return None
+    finally:
+        k32.CloseHandle(ctypes.c_void_p(handle))
+    return ((times[0].dwHighDateTime << 32) | times[0].dwLowDateTime) / 1e7 - 11644473600  # from 1601, 100 ns
+
+
+CPU, ALIVE, STARTED = cpu_percent, alive, started  # tests give their own
+
+
+def live(path: Path, text: str) -> bool:
+    """A slot's gate still runs: its pid lives and started before the slot was written (else the pid is another
+    process's now: pids are reused), and the slot is under `SLOT_STALE_S` old (one with no pid yet is being written,
+    unless it is older than a minute)."""
+    try:
+        age = time.time() - path.stat().st_mtime
+    except OSError:
+        return False
+    if age > SLOT_STALE_S:
+        return False
+    pid = PID.search(text)
+    if not pid:
+        return age < 60
+    if not ALIVE(int(pid.group(1))):
+        return False
+    born = STARTED(int(pid.group(1)))
+    return born is None or born <= time.time() - age + 2  # 2 s: the clocks' grain
+
+
+def loads(part: dict) -> bool:
+    """Whether a part loads this machine: any local part not marked `light` (a type check, a lint)."""
+    return not part.get("remote") and not part.get("light")
+
+
+def software(part: dict) -> bool:
+    return not part.get("remote") and part.get("renderer") == "software"
+
+
+class Slot:
+    """One of `limit` slots in `.work/ci/<room>/` (the CPU admission above), held while a part runs. Held back (all
+    taken, or the CPU at `top` while another runs), it tries again each `WAIT_S` until `end` (WAITED)."""
+
+    def __init__(self, config: dict, room: str, limit: int, who: str, tag: str, top: float | None = None):
+        self.room, self.what, self.limit, self.top = out_dir(config) / room, room, int(limit), top
+        self.who, self.tag, self.wait_m = who, tag, config["wait_minutes"]
+        self.path, self.mine = None, ""
+
+    def holders(self) -> list[str]:
+        """The live slots' `<who> since <time>`, a dead gate's slot dropped on the way."""
+        out = []
+        for k in range(1, self.limit + 1):
+            path = self.room / f"slot{k}"
+            text = hold_text(path)
+            if not path.exists():
+                continue
+            if live(path, text):
+                out.append(since(text))
+            else:
+                drop_if(path, text)
+        return out
+
+    def try_take(self) -> bool:
+        mine = f"{self.who} {stamp()}\npid {os.getpid()}"
+        for k in range(1, self.limit + 1):
+            path = self.room / f"slot{k}"
+            try:
+                with open(path, "x", encoding="utf-8") as out:
+                    out.write(mine)
+            except FileExistsError:
+                continue
+            self.path, self.mine = path, mine
+            return True
+        return False
+
+    def take(self, end: float) -> str | None:
+        self.room.mkdir(parents=True, exist_ok=True)
+        seen = None
+        while True:
+            others = self.holders()
+            if len(others) >= self.limit:
+                where = f"{len(others)} of {self.limit} {self.what} slots"
+            elif self.top is not None and others and (cpu := CPU()) >= self.top:
+                where = f"the CPU under {self.top:g}% (it is {cpu:.0f}% with {len(others)} other run{'s' * (len(others) > 1)})"
+            elif self.try_take():
+                return None
+            else:  # taken since the look: the next look says
+                where = f"{len(others)} of {self.limit} {self.what} slots"
+            if (where.split(" (")[0], others) != seen:
+                say(f"{self.tag}: waiting for {where}" + (f", held by {' and '.join(others)}" if others else ""))
+                seen = (where.split(" (")[0], others)
+            left = end - time.monotonic()
+            if left <= 0:
+                return f"{self.wait_m:g} min for {where}"
+            time.sleep(min(WAIT_S, left))  # inside one foreground call, not a session polling
+
+    def release(self) -> None:
+        if self.path and hold_text(self.path) == self.mine:
+            self.path.unlink(missing_ok=True)
+        self.path = None
 
 
 def fill(cmd: str, got: dict) -> str:
@@ -386,18 +604,31 @@ def run_part(part: dict, config: dict, tree: Path, logs: Path, sha: str) -> dict
     got = {"name": name, "machine": config["remote"]["name"] if part.get("remote") else config["name"],
            "where": "remote" if part.get("remote") else "docker" if part.get("docker") else "host",
            "log": str((logs / f"{name}.log").relative_to(config["main"])).replace("\\", "/")}
+    got["renderer"] = part.get("renderer", "any")
     if part.get("heavy") and (why := busy(config)):
         return {**got, "busy": True, "reason": why}
-    lock = Lock(config, part["try_locks"], f"gate-{sha[:8]}", tag=name) if part.get("try_locks") else None
-    if lock:
-        if waited := lock.take():  # nothing ran: no red, and no time off the part's own `timeout`
-            return {**got, "waited": waited}
-        got.update(lock=lock.name, stack=part["locks"].index(lock.name) + 1, **({"moved": lock.moved} if lock.moved else {}))
-        started = time.monotonic()
+    cmd = part.get("cmd", "").strip()
+    if not cmd:
+        return {**got, "error": "no cmd in tools/ci/ci.json (the bootstrap batch sets it)"}
+    who, slots = f"gate-{sha[:8]}", []
+    lock = Lock(config, part["try_locks"], who, tag=name) if part.get("try_locks") else None
+    end = time.monotonic() + config["wait_minutes"] * 60  # one wait clock: software slot, then lock, then CPU slot
     try:
-        cmd = part.get("cmd", "").strip()
-        if not cmd:
-            return {**got, "error": "no cmd in tools/ci/ci.json (the bootstrap batch sets it)"}
+        # nothing ran on a WAITED: no red, and no time off the part's own `timeout`
+        if software(part) and config["software_slots"] > 0:
+            slots.append(Slot(config, "software", config["software_slots"], who, name))
+            if waited := slots[-1].take(end):
+                return {**got, "waited": waited}
+        if lock:
+            if waited := lock.take(end):
+                return {**got, "waited": waited}
+            got.update(lock=lock.name, stack=part["locks"].index(lock.name) + 1, **({"moved": lock.moved} if lock.moved else {}))
+        if loads(part) and config["cpu_slots"] > 0:
+            slots.append(Slot(config, "cpu", config["cpu_slots"], who, name, top=float(config["cpu_max"])))
+            if waited := slots[-1].take(end):
+                return {**got, "waited": waited}
+        started = time.monotonic()
+        say(f"$ {name}", console=False)  # its wait is over (coord-beat's `waiting:` line drops it)
         if part.get("files"):
             cmd = part["files_cmd"].replace("{files}", " ".join(part["files"]))
         if part.get("junit"):
@@ -429,6 +660,8 @@ def run_part(part: dict, config: dict, tree: Path, logs: Path, sha: str) -> dict
         if got.get("errors") and not got.get("error"):
             got["error"] = got["errors"][0]
     finally:
+        for slot in slots:
+            slot.release()
         if lock:
             lock.release()
     got["seconds"] = round(time.monotonic() - started)
@@ -455,6 +688,8 @@ def listed(item: dict, part: dict, known: list[dict]) -> dict | None:
         if e.get("part") not in (None, "any", part["name"]):
             continue
         if not {part["machine"], "any"} & set(e.get("machines", ["any"])):
+            continue
+        if e.get("renderer", "any") not in ("any", part.get("renderer", "any")):
             continue
         if e.get("title"):
             if e["test"] in (item["file"], item["classname"]) and e["title"] in item["name"]:
@@ -597,6 +832,7 @@ def do_run(config: dict, plan: dict, keep: bool) -> dict:
         shutil.rmtree(logs, ignore_errors=True)
     logs.mkdir(parents=True, exist_ok=True)
     (logs / "plan.txt").write_text(describe(plan) + "\n", encoding="utf-8")
+    SAY_LOG[:] = [logs / "gate.log"]
     tree = export(sha, config)
     parts = []
     try:
