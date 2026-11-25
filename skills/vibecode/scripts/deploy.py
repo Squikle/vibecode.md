@@ -11,7 +11,7 @@ Usage: python -I -X utf8 deploy.py <target> <answers.json>
 - templates/opencode-global is never copied into a project.
 
 Usage: python -I -X utf8 deploy.py --global [--force]
-- Copies templates/opencode-global's plugins/* and tui-plugins/* into your OpenCode config folder
+- Copies templates/opencode-global's plugins/*, tui-plugins/* and scripts/* into your OpenCode config folder
   ($XDG_CONFIG_HOME/opencode, else ~/.config/opencode) only where missing (--force: overwrite the kit's own files).
 - Never edits opencode.jsonc or cli.json: prints the cli.json lines and the config snippet instead.
 """
@@ -27,7 +27,7 @@ def install_global(args: list) -> int:
     force, kit = bool(args), base / "opencode-global"
     home = pathlib.Path(os.environ.get("XDG_CONFIG_HOME") or pathlib.Path.home() / ".config") / "opencode"
     done, kept, tui = [], [], []
-    for sub in ("plugins", "tui-plugins"):
+    for sub in ("plugins", "tui-plugins", "scripts"):
         for src in sorted((kit / sub).iterdir()) if (kit / sub).is_dir() else []:
             dst = home / sub / src.name
             if sub == "tui-plugins":
@@ -58,6 +58,9 @@ def install_global(args: list) -> int:
     if (kit / "plugins" / "news").is_dir():
         print("todo (news): no cli.json line; restart OpenCode, then the TUI. `/todo` opens the list of 📌 lines.")
         print("  How it works: " + (kit / "README.md").as_posix() + " (section: todo)")
+    if (kit / "scripts" / "metrics").is_dir():
+        print("metrics: a no-model shell automation every 10 min runs scripts/metrics/metrics.py (0 tokens).")
+        print("  How it works: " + (kit / "README.md").as_posix() + " (section: metrics)")
     print("\nMerge by hand into " + (home / "opencode.jsonc").as_posix() + " (deploy never edits it):\n")
     print((kit / "opencode.snippet.jsonc").read_text(encoding="utf-8"))
     return 0

@@ -13,6 +13,7 @@ files), prints what to add to your configs, and **never edits `opencode.jsonc` o
 | rtk | its own install | server plugin | ~58% of `git log`, ~46% of `git status` output |
 | `plugins/pacer/` | `plugins/pacer/` | server plugin + TUI part (`/pacer`), one folder, no `cli.json` line | model calls: wake-ups in a busy session wait and go out as one call; usage paced against the plan's limits |
 | `plugins/news/` | `plugins/news/` | server plugin + TUI part (`/todo`), one folder, no `cli.json` line | your attention: what waits on you is a list with a footer count, not something to dig out of a long chat; 0 model tokens |
+| `scripts/metrics/` | `scripts/metrics/` | a script for a no-model shell automation | usage questions answered from a chart page, not by an agent's reads; 0 model tokens |
 
 ## prompt-polish
 
@@ -78,6 +79,32 @@ upstream: https://github.com/Squikle/ctxpick (994c991); update by recopying
   OpenCode; fails open (errors are logged, never thrown).
 - One folder: `index.js`, `news-core.js`, `tui.js`, `panel.jsx`. Restart OpenCode, then the TUI. Tests stay in the
   kit (`node --test tests/news/`).
+
+## metrics
+
+- Ported from the source project's collector. `metrics.py` is stdlib-only Python that never calls a model and always
+  exits 0 (one line per run in its data folder's `metrics.log`).
+- **What it keeps** (append-only JSONL, one file per host, so several machines' files merge when read; in
+  `$METRICS_DATA`, else `$XDG_DATA_HOME/metrics`, else `~/.local/share/metrics`):
+  - each new pacer usage sample (5h, week, per-model weekly %, the mode);
+  - per hour, model and role (top-level or child) token sums from OpenCode's database, read-only;
+  - active child sessions per hour;
+  - with `--work <project>/.work`, one row per gate verdict.
+- **The page:** `--page <file.md>` rewrites a chart page each run: the limits, the week against an even line, tokens by
+  role, model and cost mix, the week % per 100 M weighted units, merges (`--repo <checkout>`) and gates per day. It
+  also shows what the week has left per day to its reset. With `--window-pct <N>` (what one 5-hour window costs of
+  the week, measured on your plan), it flags a week left under one window a day. The charts are Obsidian "Charts"
+  code blocks, so a vault note (`.work/vault/Metrics.md`) is the natural place.
+- `--provider <id>` (repeatable) counts only those providers, such as your paid one and not a local model.
+- **Run it from a no-model shell automation every 10 minutes**, never from an agent:
+
+  ```
+  python -I -X utf8 <config folder>/scripts/metrics/metrics.py --work <project>/.work --repo <project> --page <project>/.work/vault/Metrics.md
+  ```
+
+- **Never have an agent read the metrics data or the page.** They are for your eyes; an agent reading them pays
+  tokens for numbers the pacer's one-line status already gives it.
+- Tests stay in the kit: `python -I -X utf8 -m unittest discover -s tests/metrics`.
 
 ## rtk
 
