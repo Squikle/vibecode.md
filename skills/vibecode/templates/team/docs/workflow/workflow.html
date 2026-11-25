@@ -154,7 +154,7 @@ flowchart TB
     <tr><td>Planner</td><td><code>{{M_PLANNER}}</code></td><td><code>docs/PLANNING.md</code></td></tr>
     <tr><td>Pre-groomer</td><td><code>{{M_PREGROOM}}</code></td><td><code>docs/workflow/pregroomer.md</code> + its brief</td></tr>
     <tr><td>CTO</td><td><code>{{M_CTO}}</code></td><td><code>docs/workflow/cto.md</code></td></tr>
-    <tr><td>Librarian</td><td><code>{{M_DOCS}}</code></td><td><code>docs/workflow/librarian.md</code></td></tr>
+    <tr><td>Librarian</td><td><code>{{M_DOCS}}</code>; <code>{{M_CTO}}</code> for a heavy job (rebuilding the docs vault)</td><td><code>docs/workflow/librarian.md</code></td></tr>
     <tr><td>Executor</td><td><code>{{M_EXEC}}</code>; <code>{{M_EXEC_HARD}}</code> when it needs thinking</td><td><code>docs/workflow/lane-brief.md</code>, its spec</td></tr>
     <tr><td>Reviewer</td><td><code>{{M_REVIEW}}</code></td><td>its brief, the diff (<code>{{M_REVIEW_DELTA}}</code> for a delta review of docs or tools only)</td></tr>
     <tr><td>Integrator (on a stop, short-lived)</td><td><code>{{M_INTEG}}</code></td><td>its brief, <code>.work/integrator-queue.md</code>, the batch's report; retires after ~4 merges or 150k</td></tr>

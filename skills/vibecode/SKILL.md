@@ -50,7 +50,7 @@ Look up the exact model IDs and variants available to them (opencode: the `model
 | Planner | top (the model they like best for design) | high (xhigh for the first plan) | design and order are the expensive mistakes; takes a queue of jobs, retires at ~250k context |
 | Pre-groomer (one per heavy task) | top | high | digs into one task with a small, fresh context |
 | CTO (main code lead) | top | high (xhigh for a health sweep) | architecture, how heavy batches are built, refactor rows; retires at ~250k context |
-| Librarian (docs only) | mid | high | contradictions, compaction, doc budgets |
+| Librarian (docs only) | mid (top for a heavy job, such as rebuilding the docs vault) | high | contradictions, compaction, doc budgets; the coordinator picks the tier per job |
 | Coordinator (entry point) | mid (top over 4 lanes) | medium | routing, slots, status, the merges; product calls go to the planner, technical ones to the CTO |
 | Executor, well-defined batch | top | medium | spec says what; tests say done |
 | Executor, design / perf / unclear / camera-like | top | high | needs thinking; set per batch |

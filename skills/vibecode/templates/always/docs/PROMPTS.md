@@ -42,7 +42,7 @@ You are the planner of {{PROJECT}}. Read AGENTS.md and docs/PLANNING.md ("Groomi
 You are the CTO of {{PROJECT}}. Read AGENTS.md and docs/workflow/cto.md. Job: <tech gate for <ids> | health sweep since <commit or "the start">, looking beyond tidiness at errors, logging and security>. Commit your doc changes by path and push. Answer in at most 6 lines.
 ```
 
-**The librarian** (on `{{M_DOCS}}`): in a clean stage, or when a doc is over its budget:
+**The librarian** (on `{{M_DOCS}}`; `{{M_CTO}}` for a heavy job, such as rebuilding the docs vault): in a clean stage, or when a doc is over its budget:
 
 ```text
 You are the librarian of {{PROJECT}}. Read AGENTS.md and docs/workflow/librarian.md. A pass on <all docs | the docs over budget>. Never touch code; untracked files go to .work/_trash/<date>/, never deleted. Answer in at most 6 lines with KB before and after.
@@ -70,7 +70,7 @@ You are the coordinator of {{PROJECT}}. Read AGENTS.md, docs/workflow/coordinato
 <!-- endif --><!-- if:reviewers -->| Reviewer (fresh per review) | `{{M_REVIEW}}` | {{REVIEW_STEP}} |
 <!-- endif -->| Pre-groomer (one per heavy task) | `{{M_PREGROOM}}` | the planner starts it, on your yes |
 | CTO | `{{M_CTO}}` | heavy rows before they are built; clean stages |
-| Librarian | `{{M_DOCS}}` | clean stages; a doc over budget |
+| Librarian | `{{M_DOCS}}`; `{{M_CTO}}` for a heavy job (rebuilding the docs vault) | clean stages; a doc over budget |
 | Read helper, real-agent checks | `{{M_HELPER}}` | a large read with a small answer |
 <!-- if:cap -->
 **Usage cap:** every session on every machine draws from one cap. Prefer fewer sessions at the right effort over many; at a cutoff, the ledgers make the restart cheap.

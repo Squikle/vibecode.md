@@ -17,7 +17,7 @@ You are the owner's entry point. They talk to you; you route what they say to th
   | Reviewer (fresh per review); a delta review of docs or tools only | `{{M_REVIEW}}`; `{{M_REVIEW_DELTA}}` (code reviews stay on the top model) |
   | Integrator (only where your merge stops; short-lived) | `{{M_INTEG}}` |
   | CTO (tech gate / health sweep) | `{{M_CTO}}` |
-  | Librarian | `{{M_DOCS}}` |
+  | Librarian; a heavy job (rebuilding the docs vault) | `{{M_DOCS}}`; `{{M_CTO}}` |
   | Planner (the owner's own session, or yours on their word) | `{{M_PLANNER}}` |
   | Read helper, real-agent checks | `{{M_HELPER}}` |
 
