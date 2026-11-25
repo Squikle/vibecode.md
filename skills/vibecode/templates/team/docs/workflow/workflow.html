@@ -22,7 +22,7 @@
 <body>
 <header>
   <h1>{{PROJECT}}: how the agents work together</h1>
-  <p>The owner talks to the coordinator. The planner decides what to build (with a pre-groomer per heavy task), the CTO decides how it is built, lanes build it, reviewers judge it, the integrator merges it, the librarian keeps the docs short. Sources: <code>docs/workflow/</code> (coordinator, cto, librarian, pregroomer, briefs), <code>docs/PLANNING.md</code>, <code>docs/HANDOVER.md</code>.</p>
+  <p>The owner talks to the coordinator. The planner decides what to build (with a pre-groomer per heavy task), the CTO decides how it is built, lanes build it, reviewers judge it, the coordinator merges it (an integrator only where that stops), the librarian keeps the docs short. Sources: <code>docs/workflow/</code> (coordinator, cto, librarian, pregroomer, briefs), <code>docs/PLANNING.md</code>, <code>docs/HANDOVER.md</code>.</p>
 </header>
 <nav>
   <a href="#roles">1. Who starts whom</a><a href="#big">2. A big task</a><a href="#t">3. T-shaped grooming</a>
@@ -96,7 +96,7 @@ flowchart LR
   A["spec ready<br/>How to build if heavy"] --> B["executor builds<br/>types + unit, docs, report"]
   B -->|"READY FOR REVIEW<br/>(executor retires)"| R{reviewer}
   R -->|"green, or only minors and nits"| F["reviewer fixes its own notes<br/>in the executor's worktree, runs the gate"]
-  F -->|"READY TO MERGE"| I["integrator: merge, gate, push,<br/>deploy, roadmap, size line"]
+  F -->|"READY TO MERGE"| I["coordinator: integrate.py, gate, ship<br/>(an integrator on a stop)"]
   R -->|"real blocker or major"| E2["executor fixes<br/>(it knows the design)"]
   E2 -->|"READY FOR REVIEW"| R2{"fresh reviewer<br/>delta only"}
   R2 --> F
@@ -157,7 +157,7 @@ flowchart TB
     <tr><td>Librarian</td><td><code>{{M_DOCS}}</code></td><td><code>docs/workflow/librarian.md</code></td></tr>
     <tr><td>Executor</td><td><code>{{M_EXEC}}</code>; <code>{{M_EXEC_HARD}}</code> when it needs thinking</td><td><code>docs/workflow/lane-brief.md</code>, its spec</td></tr>
     <tr><td>Reviewer</td><td><code>{{M_REVIEW}}</code></td><td>its brief, the diff (<code>{{M_REVIEW_DELTA}}</code> for a delta review of docs or tools only)</td></tr>
-    <tr><td>Integrator (short-lived)</td><td><code>{{M_INTEG}}</code></td><td>its brief, <code>.work/integrator-queue.md</code>, the batch's report; retires after ~4 merges or 150k</td></tr>
+    <tr><td>Integrator (on a stop, short-lived)</td><td><code>{{M_INTEG}}</code></td><td>its brief, <code>.work/integrator-queue.md</code>, the batch's report; retires after ~4 merges or 150k</td></tr>
     <tr><td>Read helper, real-agent checks</td><td><code>{{M_HELPER}}</code></td><td>its brief</td></tr>
   </table>
   <p style="margin-top:12px">Doc budgets (what each session pays at its start): <code>AGENTS.md</code> 10 KB, <code>docs/HANDOVER.md</code>, <code>docs/ARCHITECTURE.md</code> and <code>docs/PLANNING.md</code> 30 KB each (<code>docs/workflow/librarian.md</code>). Each role's start reads total at most 60 KB, held by <code>tools/work/check-docs.py</code>. The planner and the CTO retire at ~250k context; the next one starts from the docs.</p>

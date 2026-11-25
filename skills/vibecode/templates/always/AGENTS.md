@@ -26,9 +26,9 @@ How to reply to them:
 | **Pre-groomer** (one task, for the planner) | `docs/workflow/pregroomer.md` | `.work/groom/<id>.md` | tracked files |
 | **CTO** (main code lead) | `docs/workflow/cto.md` | the architecture's rules, a spec's `## How to build`, refactor rows | feature code, product calls |
 | **Librarian** | `docs/workflow/librarian.md` | docs only: contradictions, compaction, budgets | code, spec requirements |
-<!-- if:team -->| **Coordinator** (the owner's entry point) | `docs/workflow/coordinator.md` | its log; routes the owner's words, runs the lanes | code, specs |
+<!-- if:team -->| **Coordinator** (the owner's entry point) | `docs/workflow/coordinator.md` | its log; routes the owner's words, runs the lanes, merges reviewed batches | code, specs |
 | **Executor** | `docs/workflow/lane-brief.md` | code, tests, docs of its batch | `main`, another batch's tree |
-| **Integrator** | `docs/workflow/integrator-brief.md` | merges on `main`, the push, the deploy | merges of unreviewed batches |
+| **Integrator** | `docs/workflow/integrator-brief.md` | a merge that stopped (conflicts, a new red, a failed ship) | merges of unreviewed batches |
 <!-- endif --><!-- if:solo -->| **Builder** | `docs/HANDOVER.md` | code, tests, docs; merges its own batch | two batches at once |
 <!-- endif --><!-- if:reviewers -->| **Reviewer** | `docs/workflow/reviewer-brief.md` | one review file | code, tests, commits |
 <!-- endif -->
@@ -51,7 +51,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 ## 4. Git
 
 - Commit per task without asking. Messages: imperative, at most two sentences, no AI footer, no co-author line.
-- Never rewrite pushed history. Never `git clean -x`/`-X`. Builders never commit to `main`<!-- if:team -->; only the integrator merges<!-- endif -->.
+- Never rewrite pushed history. Never `git clean -x`/`-X`. Builders never commit to `main`<!-- if:team -->; only the coordinator and the integrator merge<!-- endif -->.
 
 ## 5. Machine rules (each one was paid for)
 

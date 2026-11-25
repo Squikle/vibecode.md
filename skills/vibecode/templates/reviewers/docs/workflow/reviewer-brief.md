@@ -9,6 +9,8 @@ Read this brief and each big doc once, in one call, from the worktree you are gi
 
 **Cheap reads:** never read a shell's saved output whole: tail it, grep `FAIL|ERROR` or rerun it filtered. No polling: wait for the background notice. A name: `python tools/work/map.py --find <name>`, then a ranged read; never a big file twice.
 
+**One step, many calls:** independent calls go in one step; a sequence you can plan (look up then query, try then fall back) is one script with its branches. Each step re-sends your whole context.
+
 ## What you read (and only this)
 
 1. **The review pack** (above), first. Items 3 to 6 only for what it leaves out.

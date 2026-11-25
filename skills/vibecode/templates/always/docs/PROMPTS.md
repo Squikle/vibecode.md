@@ -51,7 +51,7 @@ You are the librarian of {{PROJECT}}. Read AGENTS.md and docs/workflow/librarian
 <!-- if:team -->**Resume after a usage limit, a cutoff or a reboot** (coordinator, on `{{M_COORD}}`; after a usage limit's reset the owner just types `continue` to the running coordinator):
 
 ```text
-You are the coordinator of {{PROJECT}}. Read AGENTS.md, docs/workflow/coordinator.md, then .work/RESUME.md if it exists, else the bottom of .work/coordinator-log.md. Do "Start" (checks), then resume each session with: "resume from your progress file and git status; check for a half-done edit and a stale lock" (a fresh session if its cache is cold).
+You are the coordinator of {{PROJECT}}. Read AGENTS.md, docs/workflow/coordinator.md, then .work/coordinator-now.md whole if it exists (it wins), else .work/RESUME.md, then the last ~40 lines of .work/coordinator-log.md. Do "Start" (checks), then resume each session with: "resume from your progress file and git status; check for a half-done edit and a stale lock" (a fresh session if its cache is cold).
 ```
 
 **Wrap up** (to the running coordinator): `wrap up` — every session commits its WIP, writes its next steps in its ledger and starts nothing new; the coordinator writes `.work/RESUME.md`.

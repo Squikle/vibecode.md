@@ -1,6 +1,6 @@
 # Brief for the integrator
 
-You merge finished batch branches into `main`, check `main`, push it, and deploy the owner's running app. Never ask anyone anything; what you cannot settle goes to the coordinator in one line.
+You finish a merge the coordinator's own run stopped on (`CONFLICTS LEFT`, `NEW-RED`, `SHIP .. FAIL`, `ERROR` twice): merge, check `main`, push it, deploy the owner's running app. When nothing stops, the coordinator runs these steps itself. Never ask anyone anything; what you cannot settle goes to the coordinator in one line.
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/integrator-brief.md`.
 Read this brief from your own worktree (or `git show origin/main:docs/workflow/integrator-brief.md`), never the main checkout's. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. **Never the specs.**
@@ -16,7 +16,7 @@ A held integrator re-sends every earlier merge on every turn (measured: one all-
 ## Places
 
 - `main` is checked out in its own worktree (the coordinator names it; default `../{{PROJECT}}-wt/main`). Every merge and check happens there; never check out `main` elsewhere.
-- **Long runs in the foreground, no polling** (`AGENTS.md` section 5): the checks, the e2e files and the deploy each in one call with a long `timeout`, the output cut to its tail; read it once. Waiting turns were the biggest share of an integrator's cost.
+- **Long runs in the foreground, no polling** (`AGENTS.md` section 5; a full gate can take hours): the checks, the e2e files and the deploy each in one call with a long `timeout`, the output cut to its tail; read it once. Waiting turns were the biggest share of an integrator's cost.
 
 ## A merge
 

@@ -12,9 +12,9 @@ The details behind `docs/workflow/coordinator.md`'s pointers. Read a section whe
 
 ## 2. Merge paths
 
-- **The row path:** the reviewer's `READY TO MERGE <id> head=` → the integrator: `integrate.py <branch> <ids...>` in the main worktree → `gate.py run <merge>` → on `GREEN`/`KNOWN-RED`, `gate.py ship <merge> --batch <id> --what ".." --try ".."` (`docs/workflow/integrator-brief.md`). `BUSY`/`ERROR`: run again later. `MOVED`: merge `origin/main` there and gate again. `ROADMAP`: the batch's row is not marked; fix the row, gate again.
+- **The row path:** the reviewer's `READY TO MERGE <id> head=` → you, in the main worktree: a dry run `git merge-tree --write-tree HEAD <branch>` (lists conflicts, changes nothing; a conflict: an integrator) → `integrate.py <branch> <ids...>` → `gate.py run <merge>` (foreground) → on `GREEN`/`KNOWN-RED`, `gate.py ship <merge> --batch <id> --what ".." --try ".."` (`integrator-brief.md` steps 2-6, the roadmap's "What's new" too). An integrator only on `CONFLICTS LEFT`, `NEW-RED`, `SHIP .. FAIL` or `ERROR` twice. `BUSY`/`ERROR`: run again later. `MOVED`: merge `origin/main` there and gate again. `ROADMAP`: the batch's row is not marked; fix the row, gate again.
 - **The rowless path:** a docs or tools pass with no rows, report or `NEW` decision whose head already holds `origin/main` skips `integrate.py`: `gate.py run <head>` → `git merge --ff-only <head>` in the main worktree → `gate.py ship <head>`. Ship needs the main worktree at the gated sha (`FAIL tree`). An ff that refuses has changed nothing: stop, never `reset`.
-- **One integrator on the main worktree at a time;** a new one only after the last retired.
+- **One integrator on the main worktree at a time;** a new one only after the last retired; you don't merge while one holds it.
 - **A chain merges as one;** so does a stacked pair where the first alone is red: back to back, one ship after both.
 - **Hold a refactor that moves shared files** while batches touching those files are in review.
 - **After a ship:** `new-flaky=` in the `SHIP` line goes into `tools/ci/known-reds.json` and `docs/QUESTIONS.md` (the next integrator or lane lists it); `vault=<written>/<misses>` with misses over 0 queues the librarian.
@@ -29,7 +29,7 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 ## 5. The checkpoint and the handover
 
-- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions with role, batch and id; machines; next moves), rewritten at every checkpoint. One-line events still go to your log. **Where it and these docs disagree, it wins** until a librarian pass folds it in.
+- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions with role, batch and id; machines; next moves), rewritten at every checkpoint. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
 - **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, ask the owner for `/pacer on` in this session, adopt the running children, carry on with the next moves." When the owner asks for that prompt, show it; they start the session.
 - **The old coordinator goes idle first:** two coordinators both spawn.
 - **Adopt the children:** a background result goes to the session that spawned it. Send each running child one line with your session id ("report to me from now on; carry on"). Until you have children of your own, run `coord-beat.py --parent <old id>`.
@@ -66,10 +66,10 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 ## 9. Gate and merge, the fine print
 
-- **Who runs which gate:** the executor runs the full `gate.py run <head> --base <base>`; a reviewer reruns only what its fixes touched (`--only <file>[:line] ...`). Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
+- **Who runs which gate:** once per batch, in full, `gate.py run <head> --base <sha it was cut from>`: the reviewer for a reviewed batch, after its fixes; else the executor. A red is rerun alone (`--only <file>[:line] ...`). A full gate can take hours: one foreground call, the longest timeout. Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
 - **Stacks and locks:** `--config <json>` picks a machine set; each set has its own lock name. **No cancel:** kill only your own test tree and free only your own lock.
 - **Stacked merges ship under one full gate** (`#2`). **Mixed line endings** merge only through `tools/work/eolmerge.py`.
 - **Every merge names its cause:** `merge-log.py --from '<why>'` (single quotes), else it refuses with `NO CAUSE`; `cause.py` checks one. A batch with no spec carries a `From:` line in its report (the owner's word with a date, or the parent batch).
-- **Integrators** stamp times from the real clock (`Get-Date` / `date`), never a guess.
-- **PowerShell traps:** `"${w}:"` before a colon; `git push` writes to stderr, so check `$LASTEXITCODE`; `.Substring` throws on a short string; Python as `python -I -X utf8`; LF files via `[IO.File]::WriteAllText(p, s, [Text.UTF8Encoding]::new($false))`.
+- **Merges** stamp times from the real clock (`Get-Date` / `date`), never a guess.
+- **PowerShell traps:** `"${w}:"` before a colon; `git push` writes to stderr, so check `$LASTEXITCODE`; `.Substring` throws on a short string; Python as `python -I -X utf8`; LF files via `[IO.File]::WriteAllText(p, s, [Text.UTF8Encoding]::new($false))`. A long inline command that writes files goes in a script file you then run: inline ones die when the server restarts mid-call.
 - **OpenCode:** its database is read-only to you; never restart or re-point the server (it is the TUI's child); plugins reload by themselves, config loads at start.

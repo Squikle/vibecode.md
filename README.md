@@ -1,6 +1,6 @@
 # vibecode
 
-An opencode skill and command that set up a fresh project folder for a **multi-agent build**: you talk to one coordinator; a planner decides what to build, a CTO decides how, executors build it in worktrees, reviewers judge it before the slow tests, an integrator merges it, and a librarian keeps the docs short. Each runs in its own session, on the model that fits its job.
+An opencode skill and command that set up a fresh project folder for a **multi-agent build**: you talk to one coordinator; a planner decides what to build, a CTO decides how, executors build it in worktrees, reviewers judge it before the slow tests, the coordinator merges it (an integrator steps in on a conflict or a red), and a librarian keeps the docs short. Each runs in its own session, on the model that fits its job.
 
 - [How it works](#how-it-works): the diagrams, from [who starts whom](#1-who-starts-whom) to [the machinery around the agents](#6-the-machinery-around-the-agents) (CI, deploy, pacer, plugins and what each saves)
 - [The roles](#the-roles) · [Commands](#commands) · [Keeping tokens low](#keeping-tokens-low)
@@ -79,7 +79,7 @@ flowchart LR
   A["spec ready<br/>How to build if heavy"] --> B["executor builds<br/>types + unit, docs, report"]
   B -->|"READY FOR REVIEW<br/>(executor retires)"| R{reviewer}
   R -->|"green, or only minors and nits"| F["reviewer fixes its own notes<br/>in the executor's worktree, runs the gate"]
-  F -->|"READY TO MERGE"| I["integrator: merge, gate, push,<br/>deploy, roadmap, size line"]
+  F -->|"READY TO MERGE"| I["coordinator: integrate.py, gate, ship<br/>(an integrator on a stop)"]
   R -->|"real blocker or major"| E2["executor fixes<br/>(it knows the design)"]
   E2 -->|"READY FOR REVIEW"| R2{"fresh reviewer<br/>delta only"}
   R2 --> F

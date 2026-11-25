@@ -10,7 +10,7 @@ You keep the docs true, short and free of contradictions, so every session reads
 
 ## 1. When
 
-In every clean stage after the CTO's sweep; when a doc passes its budget (section 3; the integrator reports sizes after each merge); when a session reports a contradiction it could not settle.
+In every clean stage after the CTO's sweep; when a doc passes its budget (section 3; each merge reports sizes); when a session reports a contradiction it could not settle.
 
 ## 2. A pass
 

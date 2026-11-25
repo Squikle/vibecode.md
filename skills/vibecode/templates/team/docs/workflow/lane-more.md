@@ -12,7 +12,7 @@ The details behind `docs/workflow/lane-brief.md`'s pointers. Read a section when
 ## 2. Your worktree
 - Its first branch exists and is checked out. A lane's batches build on each other: each later one from the branch of the batch before.
 - **Shared dependency links:** an install through a link empties the main tree's folder (in the source project it broke every lane twice). Before `git worktree remove`: remove the link only (`cmd /c rmdir <link>` on Windows, `rm <link>` elsewhere).
-- **The live app is the owner's:** only the integrator redeploys it (`gate.py ship`). A trial stack: `docker compose -p <id> ...` and `down` in the same command; never the default project name.
+- **The live app is the owner's:** only a merge redeploys it (`gate.py ship`). A trial stack: `docker compose -p <id> ...` and `down` in the same command; never the default project name.
 - **A `.env`** a test needs is made from `.env.example` in the command that needs it and deleted in the same command; `git status` shows none before a commit.
 - **Never pipe a script into `python -`/`node -`** (it hangs on stdin): write the file, then run it. Non-ASCII text piped from a shell into python can lose characters: edit those files with your file tools.
 - **Git:** never change git config (a `core.bare = true` once broke the main tree). A commit that rewrites a whole file keeps its line endings. Untracked tool folders (`.serena/` and the like): never commit them.
@@ -22,13 +22,13 @@ The details behind `docs/workflow/lane-brief.md`'s pointers. Read a section when
 ## 3. The loop, in detail
 - **The ledger** (`.work/<id>/progress.md`): commit, gate numbers, open reds, traps, one line each (append, don't rewrite). Read it back only after a compaction or a resume. The coordinator deletes it once the batch is MERGED or retired.
 - **No failing test, no ship:** each rule of "What must be true" gets a test seen red before the change, so the test proves the rule. A rule no test can hold (a look, a feel) gets one line in the report; the reviewer checks it by hand. Extend an existing test before you add a near-copy.
-- **The gate** (`tools/ci/README.md`): `gate.py plan <head>` says what it runs and why. It takes the locks, reruns reds alone and prints one `GATE` line. `--all` when the diff touches what every test stands on (shared helpers, fixtures, the default view). `BUSY`: another run holds the machine; run it again later. `ERROR` twice (the gate itself broke): run its plan by hand and say so.
+- **The gate** (`tools/ci/README.md`; a full one can take hours): `gate.py plan <head>` says what it runs and why. It takes the locks, reruns reds alone and prints one `GATE` line. `--all` when the diff touches what every test stands on (shared helpers, fixtures, the default view). `BUSY`: another run holds the machine; run it again later. `ERROR` twice (the gate itself broke): run its plan by hand and say so.
 - **Reds:** `KNOWN-RED` is listed (`tools/ci/known-reds.json`, `docs/QUESTIONS.md`). One that passed alone but is in no list is a new flaky: list it. Never weaken or delete a test. A major change is a new approach, a rewrite of a part, or a change of what the user sees.
 
 ## 4. Docs and the report
-- Docs as HANDOVER section 3 step 4: a row of `QUESTIONS.md` or `DECISIONS.md` goes where `find.py --toc`/`--section` shows, never after a whole read; a new decision is numbered `NEW` (the integrator numbers it).
+- Docs as HANDOVER section 3 step 4: a row of `QUESTIONS.md` or `DECISIONS.md` goes where `find.py --toc`/`--section` shows, never after a whole read; a new decision is numbered `NEW` (the merge numbers it).
 - **The report** is in `<main tree>/.work/<id>/report.md` (the main tree's `.work`, not your worktree's), in HANDOVER section 3 step 5's parts, with the `GATE` line in its Gate part and one "Built so far" row. A batch with no spec carries `From: <why>` (a batch id, or the owner's dated quote `Owner YYYY-MM-DD: "<quote>"`; a fix lane names the batch it fixes): the merge log needs a cause. Docs name a session by its role and batch id.
-- The branch stays as it is: the integrator merges it.
+- The branch stays as it is: the coordinator merges it.
 
 ## 5. The review
 1. **Build** the batch with its tests (test-first); delete the plan, commit, write the report, answer `READY FOR REVIEW <id> base=<sha> head=<sha>`.
