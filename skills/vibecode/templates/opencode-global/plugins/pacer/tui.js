@@ -6,7 +6,8 @@ import { Plugin } from "@opencode/plugin/tui"
 import { readFileSync, statSync, existsSync } from "node:fs"
 import { join } from "node:path"
 import { homedir } from "node:os"
-import { parseStatus, headline, rows, rowAction, newSlotCommand, slashRoute, nowRoute, replyToast, footerText } from "./tui-core.js"
+import { parseStatus, headline, rows, rowAction, newSlotCommand, slashRoute, nowRoute, replyToast, footerText, footerClick } from "./tui-core.js"
+import { appendFileSync, mkdirSync } from "node:fs"
 
 const DATA = process.env.PACER_DATA || join(homedir(), ".local", "share", "pacer")
 const TOGGLES = join(DATA, "toggles.json"), STATE = join(DATA, "plugin-state.json")
@@ -144,8 +145,23 @@ export default Plugin.define({
     // the live timer ("pacer: 2 held · flush in 23s"), in its own JSX file: if it fails to load, the pop-up stays
     let unslot
     const footerFor = (sessionID) => footerText(text(STATE), sessionID ?? sessionNow(), Date.now(), text(TOGGLES))
+    // a left click on the footer label opens the pop-up (same as bare /pacer). tui.log (own file, never a
+    // status file) records mounts + clicks so a click can be proven from the log.
+    const tuiLog = (what, obj) => { try { mkdirSync(DATA, { recursive: true }); appendFileSync(join(DATA, "tui.log"), `${new Date().toISOString()} ${what} ${JSON.stringify(obj ?? {})}\n`) } catch {} }
+    let opening = 0
+    const onClick = (ev) => {
+      try {
+        let sel = ""
+        try { sel = context.renderer?.getSelection?.()?.getSelectedText?.() ?? "" } catch {}
+        if (!footerClick(ev, sel)) return
+        tuiLog("click", { button: ev?.button, busy: !!opening })
+        if (opening && Date.now() - opening < 60e3) return // double click: one pop-up
+        opening = Date.now()
+        void run("").finally(() => { opening = 0 })
+      } catch {}
+    }
     import("./footer.jsx")
-      .then((m) => { unslot = m.mountFooter(context, footerFor) })
+      .then((m) => { unslot = m.mountFooter(context, footerFor, onClick, (up) => tuiLog("footer-mounted", { up })) })
       .catch((e) => toast(`pacer timer off: ${msg(e)}`, "warning"))
     return () => { try { if (typeof unslot === "function") unslot() } catch {} }
   },

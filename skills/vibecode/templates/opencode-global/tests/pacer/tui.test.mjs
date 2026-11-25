@@ -178,3 +178,15 @@ test("newSlotCommand + slashRoute", () => {
   assert.deepEqual(slashRoute(" batch on "), { kind: "forward", text: "batch on" })
   assert.equal(ago(0, NOW), "never"); assert.equal(ago(NOW - 3 * 3600e3, NOW), "3 h ago"); assert.equal(flagsOf({}), "-")
 })
+
+// footer label click (footer.jsx onMouseUp -> tui.js opens the /pacer pop-up)
+import { footerClick } from "../../plugins/pacer/tui-core.js"
+test("footerClick: left button (or no event info) opens; right/middle/wheel and a text drag-select do not", () => {
+  assert.equal(footerClick({ button: 0 }), true)
+  assert.equal(footerClick(undefined), true)
+  assert.equal(footerClick({ button: 2 }), false)
+  assert.equal(footerClick({ button: 1 }), false)
+  assert.equal(footerClick({ button: 4 }), false)
+  assert.equal(footerClick({ button: 0 }, "selected text"), false)
+  assert.equal(footerClick({ button: 0 }, ""), true)
+})

@@ -1,22 +1,25 @@
-"""pacer.py: read the Claude plan's usage of its 5 h and 7 d windows and pick a pacing mode.
+"""pacer: spread the Claude subscription's usage over its 5 h and 7 d windows, and wake the coordinator.
 
-The pacer plugin (index.js, next to this file) runs `status --json` every 5 min while a slot is paced or global
-is on, and on a `/pacer status` when the last read is over 5 min old. Nothing else calls out.
-
-Credentials are read-only: it reads the Claude Code OAuth access token ($CLAUDE_CODE_OAUTH_TOKEN, else
-<$CLAUDE_CONFIG_DIR or ~/.claude>/.credentials.json, else the macOS keychain) and never prints, writes or
-refreshes it (a refresh rotates the token and can log Claude Code out). An expired token = no reading this time.
+Credentials are read-only: it reads the OAuth access token, never prints, writes or refreshes it
+(a refresh rotates the token and can log Claude Code out). An expired token = skip this tick.
 
   python pacer.py status            one line: usage, pace lines, mode, lane cap (writes state.json)
-  python pacer.py status --json     the plugin's machine mode: one JSON object, writes nothing
+  python pacer.py status --json     machine mode for the pacer plugin: one JSON object, writes nothing
+  python pacer.py claim [--dir D]   RETIRED (v3): the plugin's /pacer toggle replaces claim.json
+  python pacer.py tick [--send]     RETIRED (v3): the plugin sends; kept only for the legacy tick tests
 
-Week toggle: decide() ignores the week unless toggles.json says "week": true. Off = the week counts as on
-pace (BURST allowed). A week limit hit (>= 100 %) still gives LIMITED: the API refuses calls then anyway.
+Week toggle (v3): decide() ignores the week unless toggles.json (next to this file, or $PACER_TOGGLES)
+says "week": true. Off = the week counts as on pace (BURST allowed). A week limit hit (>= 100 %) still
+gives LIMITED: the API refuses calls then anyway.
 
-Modes (advisory: the coordinator obeys the lane cap when it starts lanes; nothing is ever stopped or killed):
+Modes (the coordinator obeys the lane cap at spawn time; it never kills a running session):
   GO 5 | EASE 3 | SLOW 2 (ahead of the 5 h or the week's line) | HOLD 0 new (5 h >= 90 %, > 1 h left)
   BURST 7 (< 1 h to the 5 h reset, week on pace: a limit hit now waits < 1 h, so caches stay warm)
-  LIMITED 0 (a limit is hit; the first reading after the reset wakes the paced session)
+  LIMITED (nothing sends; the first tick after the reset wakes the coordinator)
+Targeting: no hardcoded id, no "latest session". The coordinator claims itself at each heartbeat;
+a send needs a claim < 75 min old (or one made < 75 min before the limit stop, for the reset wake),
+the session in its project's list, and no newer coordinator-titled
+session active since the claim. The message tells a wrong receiver to reply "not me".
 """
 import argparse
 import datetime as dt
@@ -24,21 +27,32 @@ import json
 import os
 import pathlib
 import platform
+import re
+import shutil
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 
-# state and toggles: a per-user data dir, never next to this file (the installed copy lives in the OpenCode
-# config dir, which may be synced). $PACER_DATA overrides; default ~/.local/share/pacer (every OS).
+HERE = pathlib.Path(__file__).resolve().parent
+# state, logs, samples, toggles: a per-user data dir, never next to this file (the installed copy lives in the
+# opencode config dir, which gets synced). $PACER_DATA overrides; default ~/.local/share/pacer (Windows + macOS).
 DATA = pathlib.Path(os.environ.get("PACER_DATA") or pathlib.Path.home() / ".local" / "share" / "pacer")
-STATE = DATA / "state.json"
+STATE, CLAIM, LOG, SAMPLES = (DATA / n for n in ("state.json", "claim.json", "pacer.log", "samples.jsonl"))
 TOGGLES = pathlib.Path(os.environ.get("PACER_TOGGLES") or DATA / "toggles.json")
 URL = "https://api.anthropic.com/api/oauth/usage"
 H5, D7 = 5 * 3600, 7 * 86400
 SLACK5, SLACK7 = 15.0, 10.0          # points allowed above the straight line
+CLAIM_MAX_AGE = 75 * 60               # heartbeats re-claim every <= 55 min, so a retired coordinator ages out fast
+IDLE_WAKE = 50 * 60                   # a 1 h cache: wake an idle coordinator before it goes cold
+MODE_WAKE_IDLE = 10 * 60              # a mode that allows more lanes wakes a coordinator idle this long
 LANES = {"GO": 5, "EASE": 3, "SLOW": 2, "HOLD": 0, "BURST": 7, "LIMITED": 0}
+
+
+def log(line):
+    with LOG.open("a", encoding="utf-8") as f:
+        f.write(f"{dt.datetime.now():%Y-%m-%d %H:%M} {line}\n")
 
 
 def load(p, default):
@@ -55,7 +69,7 @@ def token():
     raw = None
     if f.exists():
         raw = f.read_text(encoding="utf-8")
-    elif platform.system() == "Darwin":  # macOS keeps it in the login keychain (UNVERIFIED there)
+    elif platform.system() == "Darwin":  # the Mac keeps it in the login keychain (UNVERIFIED there)
         r = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
                            capture_output=True, text=True, timeout=5)
         raw = r.stdout if r.returncode == 0 else None
@@ -121,7 +135,7 @@ def decide(u, now, week=None):
 
 
 def _clock(ts, f):
-    # to the nearest minute: the API says 19:49:59.9 for a 19:50 reset
+    # to the nearest minute: the API says 19:49:59.9 for a 19:50 reset (it showed 19:49, and the week 16:59)
     return dt.datetime.fromtimestamp(round(ts / 60) * 60).strftime(f)
 
 
@@ -135,10 +149,58 @@ def fmt(u, d, now):
             f"{' | ' + sc if sc else ''} | mode {d['mode']} lanes<={d['lanes']} ({d['why']})")
 
 
+def opencode():
+    return shutil.which("opencode") or "opencode"
+
+
+def sessions(directory):
+    r = subprocess.run([opencode(), "session", "list", "--format", "json", "-n", "30"], cwd=directory,
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+    out = r.stdout
+    try:
+        return json.loads(out[out.find("["):]) if "[" in out else []
+    except ValueError:
+        return []
+
+
+def live_claim(now, limited_since=None):
+    c = load(CLAIM, None)
+    if not c:
+        return None, "no claim (the coordinator runs: pacer.py claim)"
+    fresh = now - c["at"] <= CLAIM_MAX_AGE
+    live_at_stop = limited_since is not None and limited_since - c["at"] <= CLAIM_MAX_AGE  # it was working when the limit hit
+    if not (fresh or live_at_stop):
+        return None, f"claim is {(now - c['at']) / 60:.0f} min old"
+    ss = sessions(c["dir"])
+    me = next((s for s in ss if s.get("id") == c["sid"]), None)
+    if not me:
+        return None, "the claimed session is not in its project's list"
+    for s in ss:
+        if (s["id"] != c["sid"] and s.get("created", 0) > me.get("created", 0) and s.get("updated", 0) / 1000 > c["at"]
+                and re.search(r"coordinat", s.get("title", ""), re.I)):
+            return None, f"newer coordinator-like session {s['id'][:12]} active since the claim: waiting for its claim"
+    c["idle"] = now - me.get("updated", 0) / 1000
+    return c, None
+
+
+def safe(msg):
+    return re.sub(r"[^A-Za-z0-9 .,:;()%+<>=/-]", " ", msg)  # survives the npm .cmd shim on Windows
+
+
+def send(c, msg):
+    kw = dict(cwd=c["dir"], stdin=subprocess.DEVNULL, stdout=(DATA / "send.log").open("ab"), stderr=subprocess.STDOUT)
+    if os.name == "nt":
+        kw["creationflags"] = 0x00000008 | 0x00000200  # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw["start_new_session"] = True
+    p = subprocess.Popen([opencode(), "run", "-s", c["sid"], safe(msg)], **kw)  # returns now; the turn runs on
+    return p.pid
+
+
 def cmd_status(a):
     now = time.time()
     u, err = usage()
-    if a.json:  # the plugin's machine mode: one JSON line, no files written, never the token
+    if getattr(a, "json", False):  # the plugin's machine mode: one JSON line, no files written, never the token
         if not u:
             print(json.dumps({"ok": False, "err": err, "at": now}))
             return 1
@@ -150,9 +212,76 @@ def cmd_status(a):
         return 1
     d = decide(u, now)
     line = fmt(u, d, now)
-    DATA.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps({"at": now, "usage": u, **d, "line": line}), encoding="utf-8")
     print(line)
+    return 0
+
+
+def cmd_claim(a):
+    sid = os.environ.get("OPENCODE_SESSION_ID")
+    if not sid:
+        print("CLAIM FAIL: no OPENCODE_SESSION_ID in this shell")
+        return 1
+    d = os.path.abspath(a.dir or os.getcwd())
+    if not any(s.get("id") == sid for s in sessions(d)):
+        print(f"CLAIM FAIL: {sid[:16]} is not in the session list seen from {d} (pass --dir <the session's directory>)")
+        return 1
+    CLAIM.write_text(json.dumps({"sid": sid, "dir": d, "at": time.time()}), encoding="utf-8")
+    print(f"CLAIM {sid[:16]} in {d}")
+    return 0
+
+
+def cmd_tick(a):
+    now = time.time()
+    st = load(STATE, {})
+    u, err = usage()
+    if not u:
+        log(f"skip: {err}")
+        print("TICK skip:", err)
+        return 0
+    d = decide(u, now)
+    line = fmt(u, d, now)
+    with SAMPLES.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"at": round(now), "p5": u["h5"]["pct"], "p7": u["d7"]["pct"], "mode": d["mode"]}) + "\n")
+    pu = st.get("usage", {})
+    prev5, prev7 = pu.get("h5", {}).get("pct"), pu.get("d7", {}).get("pct")
+    prev_mode, last_send, lim = st.get("mode"), st.get("last_send", 0), st.get("limited_since")
+    why = None
+    if d["mode"] == "LIMITED":
+        st["limited_since"] = lim or now
+    else:
+        st["limited_since"] = None  # used once, on the first tick after a stop, then gone
+        reset = any(p is not None and p >= 95 and q < p - 40
+                    for p, q in ((prev5, u["h5"]["pct"]), (prev7, u["d7"]["pct"])))
+        c, cerr = live_claim(now, lim if reset else None)
+        if reset:
+            why = "RESET"
+        elif c and c["idle"] >= IDLE_WAKE and now - last_send >= IDLE_WAKE:
+            why = "HEARTBEAT"
+        elif c and d["lanes"] > LANES.get(prev_mode, 5) and c["idle"] >= MODE_WAKE_IDLE and now - last_send >= MODE_WAKE_IDLE:
+            why = f"MODE {prev_mode}->{d['mode']}"
+        if why and not c:
+            log(f"{why} due but no target: {cerr}")
+            why = None
+    st.update({"at": now, "usage": u, **d, "line": line})
+    if why:
+        tail = (" the limit reset. Resume the stopped children with the keep-alive line, then go on." if why == "RESET"
+                else " HOLD: start nothing new; idle children get a warm-only ping (Reply OK, no tools); running ones"
+                     " finish their step." if d["mode"] == "HOLD"
+                else " do your heartbeat: keep-alives, merges, spawns within the lane cap.")
+        msg = (f"PACER {dt.datetime.now():%H:%M} {why}: {line[11:]}.{tail} Reply in 2 lines."
+               " Not this project's coordinator? Reply: not me, and do nothing.")
+        if a.send:
+            pid = send(c, msg)
+            st["last_send"] = now
+            log(f"SENT {why} to {c['sid'][:16]} pid={pid}: {line}")
+            print(f"TICK SENT {why} -> {c['sid'][:16]}")
+        else:
+            log(f"WOULD SEND {why} to {c['sid'][:16]}: {line}")
+            print(f"TICK would send {why} -> {c['sid'][:16]} (dry run; --send delivers)\n  {safe(msg)}")
+    else:
+        print("TICK", line)
+    STATE.write_text(json.dumps(st), encoding="utf-8")
     return 0
 
 
@@ -161,8 +290,14 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("status")
     p.add_argument("--json", action="store_true")
-    a = ap.parse_args()  # an unknown argument exits 2
-    return cmd_status(a)
+    p = sub.add_parser("claim")
+    p.add_argument("--dir")
+    p = sub.add_parser("tick")
+    p.add_argument("--send", action="store_true")
+    a = ap.parse_args()
+    if not getattr(a, "json", False):
+        DATA.mkdir(parents=True, exist_ok=True)  # --json writes nothing, so it creates nothing either
+    return {"status": cmd_status, "claim": cmd_claim, "tick": cmd_tick}[a.cmd](a)
 
 
 if __name__ == "__main__":

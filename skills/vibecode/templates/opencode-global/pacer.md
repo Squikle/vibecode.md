@@ -9,7 +9,7 @@ it on with `/pacer`.
 | Part | Files | What it does |
 |---|---|---|
 | server plugin | `index.js` | holds and flushes wake-ups, keeps the state, answers the pop-up over RPC |
-| TUI plugin | `tui.js`, `tui-core.js`, `footer.jsx`, `rpc.js` | the `/pacer` pop-up and one footer line in the prompt |
+| TUI plugin | `tui.js`, `tui-core.js`, `footer.jsx`, `rpc.js` | the `/pacer` pop-up and one footer line in the prompt; a left click on the footer line opens the pop-up |
 | usage reader | `pacer.py` | reads the plan's usage every 5 min, only while pacing is on |
 
 - All of them live in one folder, `plugins/pacer/` in the OpenCode config folder. No `cli.json` line is needed.
@@ -96,6 +96,7 @@ says how many lanes (parallel workers) to run.
 | You see | Meaning |
 |---|---|
 | empty footer | this session has no slot |
+| clicking the footer does nothing | only a left click opens the pop-up; a right/middle click, the wheel or a text drag-select does not |
 | toast "pacer timer off" | the footer failed to load; the pop-up still works |
 | `/pacer flush` says "restart OpenCode" | standby: two builds are loaded, the older one still runs; restart to finish |
 | something else | `plugin.log` in the data folder (rotates at 1 MB) |
@@ -105,5 +106,6 @@ says how many lanes (parallel workers) to run.
 ## Tests
 
 From the kit folder: `node --test tests/pacer/core.test.mjs tests/pacer/plugin.test.mjs tests/pacer/tui.test.mjs`
-and `python -I tests/pacer/pacer_cases.py`. `node_modules/@opencode/plugin` there is a test stub only; OpenCode
+and `python -I tests/pacer/pacer_cases.py` (`pacer_tick_cases.py` covers the retired `claim`/`tick` path, kept for
+its tests). `node_modules/@opencode/plugin` there is a test stub only; OpenCode
 provides the real module at runtime.

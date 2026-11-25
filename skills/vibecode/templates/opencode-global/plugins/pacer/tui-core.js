@@ -170,5 +170,9 @@ export function replyToast(cmd, reply) {
 // `/now <prompt>`: the prompt skips the batcher (anything held rides along); bare `/now` flushes what is held
 export const nowRoute = (input) => (String(input ?? "").trim() ? { kind: "prompt", text: String(input).trim() } : { kind: "flush" })
 
+// footer label click -> open the pop-up: left button only (opentui MouseButton LEFT=0; 1 middle, 2 right, 4/5
+// wheel), no event info counts as a click; a click that ends a drag-select of text (selected text) does not
+export const footerClick = (ev, selectedText) => (ev?.button === undefined || ev?.button === 0) && !selectedText
+
 // typed `/pacer <args>` goes to the server unchanged; bare `/pacer` (or the palette) opens the dialog
 export const slashRoute = (input) => (String(input ?? "").trim() ? { kind: "forward", text: String(input).trim() } : { kind: "open" })
