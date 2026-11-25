@@ -5,11 +5,13 @@ names the parts (test kinds), their commands, the paths that trigger each and wh
     python tools/ci/gate.py plan [sha] [--base origin/main] [--parts a b] [--no-remote]   what would run, and why
     python tools/ci/gate.py run [sha] [same options] [--keep]       the gate: `.work/ci/<sha8>.json` + one line
     python tools/ci/gate.py run [sha] --only unit tests/test_x.py   quiet (<= 15 lines), never shippable
+    python tools/ci/gate.py run [sha] ... --stack 2                 each locked part on its 2nd lock (a `lock` list)
     python tools/ci/gate.py status [sha]                            the last run's line again
     python tools/ci/gate.py ship <sha> --batch <id> --what .. --try .. [--up ..] [--no-roadmap] [--dry-run]
 
 Verdicts: GREEN, KNOWN-RED (every red listed in known-reds.json, or green alone 2 of 2; 3 of 3 for a listed flake),
-NEW-RED, BUSY (a heavy part skipped: the machine is busy), ERROR (the gate or a runner broke). Exit 0 only for the
+NEW-RED, BUSY (a heavy part skipped: the machine is busy), WAITED (a lock stayed held `wait_minutes`: nothing ran),
+ERROR (the gate or a runner broke). Exit 0 only for the
 first two. Stdlib only; Windows, macOS and Linux. Unknown arguments are an error (argparse), never guessed."""
 import argparse
 import datetime
@@ -23,6 +25,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -33,8 +36,8 @@ WINDOWS = os.name == "nt"
 NO_WINDOW = 0x08000000 if WINDOWS else 0
 QUIET_LINES = 15
 SHIPPABLE = ("GREEN", "KNOWN-RED")
-VERDICTS = ("GREEN", "KNOWN-RED", "BUSY", "NEW-RED", "ERROR")
-DEFAULTS = {"base": "origin/main", "lock_minutes": 50, "parts": [], "busy": {"processes": []},
+VERDICTS = ("GREEN", "KNOWN-RED", "BUSY", "WAITED", "NEW-RED", "ERROR")  # the worst found wins
+DEFAULTS = {"base": "origin/main", "lock_minutes": 50, "wait_minutes": 180, "parts": [], "busy": {"processes": []},
             "docs_only": ["docs/*", "*.md"], "ship": {}}
 LOG_TAIL = 40  # lines of a failed part's log kept in its error
 
@@ -110,7 +113,10 @@ def changed_files(sha: str, base: str) -> list[str]:
     return git("diff", "--name-only", f"{git('merge-base', base, sha)}", sha).split()
 
 
-def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only: list[str] | None) -> dict:
+def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only: list[str] | None,
+               stack: int | None = None) -> dict:
+    """The parts the diff (or `--parts`, `--only`) runs. A locked part's `try_locks`: `--stack N` its Nth lock (a part
+    with fewer keeps its first); a `--only` run all of them, the first free taken; else its first, never moved."""
     parts, skipped, why = [], [], {}
     known = {p["name"]: p for p in config["parts"]}
     if only:
@@ -153,8 +159,17 @@ def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only
         if p.get("remote") and (config.get("no_remote") or not config.get("remote")):
             parts.remove(p)
             skipped.append({"name": p["name"], "off": True, "reason": "--no-remote" if config.get("no_remote") else "no remote in the config"})
+    for p in parts:
+        if p.get("lock"):
+            p["locks"] = [p["lock"]] if isinstance(p["lock"], str) else list(p["lock"])
+            n = len(p["locks"])
+            p["try_locks"] = ([p["locks"][stack - 1]] if stack and n >= stack else p["locks"] if mode == "only" and not stack
+                              else p["locks"][:1])
+    if stack and not any(len(p.get("locks", [])) >= stack for p in parts):
+        raise SystemExit(f"--stack {stack}: no part of this run has a lock {stack} (a `lock` list in tools/ci/ci.json); "
+                         "run without --stack")
     return {"sha": sha, "base": base, "mode": mode, "files": len(changed), "parts": parts, "why": why, "skipped": skipped,
-            "options": {"no_remote": bool(config.get("no_remote"))}}
+            "options": {"no_remote": bool(config.get("no_remote")), **({"stack": stack} if stack else {})}}
 
 
 def describe(plan: dict) -> str:
@@ -162,6 +177,7 @@ def describe(plan: dict) -> str:
     for p in plan["parts"]:
         where = "remote" if p.get("remote") else "docker" if p.get("docker") else "host"
         extra = f" files={' '.join(p['files'])}" if p.get("files") else ""
+        extra += f" lock={' or '.join(p['try_locks'])}" if p.get("try_locks") else ""
         lines.append(f"  run  {p['name']} [{where}]{extra}: {plan['why'].get(p['name'], '')}")
     for s in plan["skipped"]:
         lines.append(f"  skip {s['name']}: {s['reason']}")
@@ -170,50 +186,127 @@ def describe(plan: dict) -> str:
 
 # ---------------------------------------------------------------- locks and the busy guard
 
+WAIT_S = 10  # between two tries at a held lock, as `tools/work/lock.ps1` and `lock.sh`
+TOUCH_S = 60  # how often a held lock's time is renewed: a part longer than `lock_minutes` is never taken as stale
+
+
+def say(text: str) -> None:
+    """A lock wait, live on the console (stderr: the status line and a quiet run's 15 lines stay on stdout)."""
+    print(text, file=sys.stderr, flush=True)
+
+
+def stamp() -> str:
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+def drop(path: Path) -> None:
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        path.unlink(missing_ok=True)
+
+
 class Lock:
     """The same machine lock as `tools/work/lock.ps1` (`.work/<name>.lock`, a file) and `lock.sh` (`.work/<name>.lock.d`,
-    a folder). Waits for its holder; a hold older than `lock_minutes` is stale and taken over; frees only its own."""
+    a folder), holding `<who> <time>`. `names` are the stacks it may take, the first tried first: it holds the first
+    free one, taken by trying (never by looking first). A hold older than `lock_minutes` is stale and taken over; its
+    own hold is kept fresh; it frees only its own. The wait has its own limit, `wait_minutes` (WAITED past it): a
+    part's `timeout` starts once it holds the lock."""
 
-    def __init__(self, config: dict, name: str, who: str):
+    def __init__(self, config: dict, names: list[str], who: str, tag: str = ""):
         work = Path(config["main"]) / ".work"
         work.mkdir(parents=True, exist_ok=True)
-        self.path = work / (f"{name}.lock" if WINDOWS else f"{name}.lock.d")
-        self.who, self.stale, self.mine = who, config["lock_minutes"] * 60, False
+        self.names = list(names)
+        self.paths = [work / (f"{n}.lock" if WINDOWS else f"{n}.lock.d") for n in self.names]
+        self.who, self.stale, self.wait_s = who, config["lock_minutes"] * 60, config["wait_minutes"] * 60
+        self.tag, self.name, self.path, self.moved = tag, None, None, ""
+        self.stop, self.toucher = threading.Event(), None
 
-    def take(self, wait_s: float) -> bool:
-        end = time.monotonic() + wait_s
+    def try_take(self, path: Path) -> bool:
         while True:
             try:
                 if WINDOWS:
-                    fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                    os.write(fd, f"{self.who} {datetime.datetime.now().isoformat()}".encode())
+                    fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    os.write(fd, f"{self.who} {stamp()}".encode())
                     os.close(fd)
                 else:
-                    self.path.mkdir()
-                    (self.path / "who").write_text(f"{self.who} {datetime.datetime.now().isoformat()}\n")
-                self.mine = True
+                    path.mkdir()
+                    (path / "who").write_text(f"{self.who} {stamp()}\n")
                 return True
             except FileExistsError:
                 try:
-                    if time.time() - self.path.stat().st_mtime > self.stale:
-                        self.drop()
+                    if time.time() - path.stat().st_mtime > self.stale:
+                        drop(path)
                         continue
                 except FileNotFoundError:
                     continue
-            if time.monotonic() > end:
                 return False
-            time.sleep(10)  # a lock wait inside one foreground call, not a session polling
 
-    def drop(self) -> None:
-        if self.path.is_dir():
-            shutil.rmtree(self.path, ignore_errors=True)
-        else:
-            self.path.unlink(missing_ok=True)
+    @staticmethod
+    def holder(path: Path) -> str:
+        """`<who> since <time>`, read from a held lock."""
+        try:
+            text = (path / "who" if path.is_dir() else path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return "someone"
+        who, _, at = text.strip().partition(" ")
+        return f"{who} since {at}" if at else who or "someone"
+
+    def held_by(self) -> str:
+        """`e2e or e2e2, held by <who> since <time> and <who> since <time>`."""
+        return f"{' or '.join(self.names)}, held by " + " and ".join(self.holder(p) for p in self.paths)
+
+    def take(self) -> str | None:
+        """None once it holds a lock; past `wait_minutes`, the wait's text (WAITED). Each new holder is said once."""
+        end, seen, first = time.monotonic() + self.wait_s, None, ""
+        while True:
+            for i, path in enumerate(self.paths):
+                if self.try_take(path):
+                    self.name, self.path = self.names[i], path
+                    if i:
+                        self.moved = f"{self.names[0]} held by {first}: ran on {self.name}"
+                        say(f"{self.tag}: {self.moved}")
+                    self.toucher = threading.Thread(target=self.fresh, daemon=True)
+                    self.toucher.start()
+                    return None
+                if i == 0:
+                    first = self.holder(path)
+            held = self.held_by()
+            if held != seen:
+                say(f"{self.tag}: waiting for {held}")
+                seen = held
+            left = end - time.monotonic()
+            if left <= 0:
+                return f"{self.wait_s / 60:g} min for {held}"
+            time.sleep(min(WAIT_S, left))  # a lock wait inside one foreground call, not a session polling
+
+    def fresh(self) -> None:
+        while not self.stop.wait(TOUCH_S):
+            try:
+                os.utime(self.path)
+            except OSError:
+                pass
 
     def release(self) -> None:
-        if self.mine:
-            self.drop()
-            self.mine = False
+        if self.path:
+            self.stop.set()
+            if self.toucher:
+                self.toucher.join()
+            drop(self.path)
+            self.path = None
+
+
+def fill(cmd: str, got: dict) -> str:
+    """`{lock}` and `{stack}` in a command: the lock the part holds and its place (from 1) in the part's `lock` list."""
+    return cmd.replace("{lock}", got.get("lock", "")).replace("{stack}", str(got.get("stack", "")))
+
+
+def held_env(got: dict) -> dict | None:
+    """The part's environment: `CI_LOCK` and `CI_STACK` (as `fill`), and `CI_LOCK_HELD`, so a `lock.ps1`/`lock.sh` in
+    its command neither waits for the lock the gate holds nor frees it."""
+    if not got.get("lock"):
+        return None
+    return {**os.environ, "CI_LOCK": got["lock"], "CI_LOCK_HELD": got["lock"], "CI_STACK": str(got["stack"])}
 
 
 def processes() -> set[str]:
@@ -295,9 +388,12 @@ def run_part(part: dict, config: dict, tree: Path, logs: Path, sha: str) -> dict
            "log": str((logs / f"{name}.log").relative_to(config["main"])).replace("\\", "/")}
     if part.get("heavy") and (why := busy(config)):
         return {**got, "busy": True, "reason": why}
-    lock = Lock(config, part["lock"], f"gate {sha[:8]}") if part.get("lock") else None
-    if lock and not lock.take(config["lock_minutes"] * 60):
-        return {**got, "busy": True, "reason": f"the {part['lock']} lock stayed held {config['lock_minutes']} min"}
+    lock = Lock(config, part["try_locks"], f"gate-{sha[:8]}", tag=name) if part.get("try_locks") else None
+    if lock:
+        if waited := lock.take():  # nothing ran: no red, and no time off the part's own `timeout`
+            return {**got, "waited": waited}
+        got.update(lock=lock.name, stack=part["locks"].index(lock.name) + 1, **({"moved": lock.moved} if lock.moved else {}))
+        started = time.monotonic()
     try:
         cmd = part.get("cmd", "").strip()
         if not cmd:
@@ -312,8 +408,9 @@ def run_part(part: dict, config: dict, tree: Path, logs: Path, sha: str) -> dict
             pushed = run(["git", "push", "-q", "-f", r["git"], f"{sha}:refs/heads/ci/{sha[:8]}"], cwd=config["main"])
             if pushed.returncode != 0:
                 return {**got, "error": f"push to the remote failed: {(pushed.stderr or '').strip()[:150]}", "rc": pushed.returncode}
-        args, shell, cwd = command(part, config, tree, cmd)
-        done = run(args, cwd=cwd, shell=shell, timeout=part.get("timeout", 30) * 60, log=logs / f"{name}.log")
+        args, shell, cwd = command(part, config, tree, fill(cmd, got))
+        done = run(args, cwd=cwd, shell=shell, env=held_env(got), timeout=part.get("timeout", 30) * 60,
+                   log=logs / f"{name}.log")
         got["rc"] = done.returncode
         if done.returncode == -9:
             got["error"] = f"timed out after {part.get('timeout', 30)} min"
@@ -374,46 +471,65 @@ def needed(entry: dict | None) -> int:
 
 def rerun(parts: list[dict], plan_parts: list[dict], config: dict, tree: Path, logs: Path, sha: str, known: list[dict]) -> None:
     """Each red alone, as often as `needed`, then judged: listed, green alone, or new (new-flaky when green alone
-    2 of 2 and not listed: the ship names it so it gets listed)."""
+    2 of 2 and not listed: the ship names it so it gets listed). A locked part's runs alone hold the lock it ran under;
+    a wait for it past `wait_minutes` leaves the reds that needed them `unjudged` (the part is WAITED, never NEW)."""
     by_name = {p["name"]: p for p in plan_parts}
     for part in parts:
         part.update({"known": 0, "green_alone": 0, "new": [], "new_flaky": []})
-        if part.get("error") or part.get("busy"):
+        if part.get("error") or part.get("busy") or part.get("waited"):
             continue
         spec = by_name[part["name"]]
-        for i, item in enumerate(part.get("reds", [])):
-            entry = listed(item, part, known)
-            need = needed(entry)
-            green = runs = 0
-            if need and spec.get("rerun"):
-                cmd = spec["rerun"]
-                for k in ("id", "name", "classname", "file"):
-                    cmd = cmd.replace("{" + k + "}", item[k])
-                for n in range(need):
-                    args, shell, cwd = command(spec, config, tree, cmd)
-                    done = run(args, cwd=cwd, shell=shell, timeout=spec.get("timeout", 30) * 60,
-                               log=logs / f"{part['name']}.alone{i}.{n}.log")
-                    runs += 1
-                    green += done.returncode == 0
-                    if done.returncode != 0:
-                        break
-            item["alone"] = f"{green}/{runs}" if runs else ""
-            if need == 0:
-                part["known"] += 1
-                item["why"] = "listed"
-            elif runs >= need and green == runs:
-                part["green_alone"] += 1
-                item["why"] = f"green alone {green} of {runs}"
-                if entry is None:
-                    part["new_flaky"].append(item["id"])
-            else:
-                part["new"].append(item)
+        lock = waited = None
+        if part.get("lock") and spec.get("rerun") and any(needed(listed(r, part, known)) for r in part.get("reds", [])):
+            lock = Lock(config, [part["lock"]], f"gate-{sha[:8]}", tag=part["name"])
+            if waited := lock.take():
+                part["waited"], part["unjudged"], lock = "rerun alone: " + waited, 0, None
+        try:
+            judge_reds(part, spec, config, tree, logs, known, waited)
+        finally:
+            if lock:
+                lock.release()
+
+
+def judge_reds(part: dict, spec: dict, config: dict, tree: Path, logs: Path, known: list[dict], waited) -> None:
+    for i, item in enumerate(part.get("reds", [])):
+        entry = listed(item, part, known)
+        need = needed(entry)
+        green = runs = 0
+        if need and waited:
+            part["unjudged"] += 1
+            item.update(alone="", why="unjudged: its runs alone waited for the lock")
+            continue
+        if need and spec.get("rerun"):
+            cmd = spec["rerun"]
+            for k in ("id", "name", "classname", "file"):
+                cmd = cmd.replace("{" + k + "}", item[k])
+            for n in range(need):
+                args, shell, cwd = command(spec, config, tree, fill(cmd, part))
+                done = run(args, cwd=cwd, shell=shell, env=held_env(part), timeout=spec.get("timeout", 30) * 60,
+                           log=logs / f"{part['name']}.alone{i}.{n}.log")
+                runs += 1
+                green += done.returncode == 0
+                if done.returncode != 0:
+                    break
+        item["alone"] = f"{green}/{runs}" if runs else ""
+        if need == 0:
+            part["known"] += 1
+            item["why"] = "listed"
+        elif runs >= need and green == runs:
+            part["green_alone"] += 1
+            item["why"] = f"green alone {green} of {runs}"
+            if entry is None:
+                part["new_flaky"].append(item["id"])
+        else:
+            part["new"].append(item)
 
 
 def verdict(parts: list[dict]) -> str:
     worst = 0
     for p in parts:
-        worst = max(worst, 4 if p.get("error") else 3 if p.get("new") else 2 if p.get("busy") else 1 if p.get("failed") else 0)
+        worst = max(worst, 5 if p.get("error") else 4 if p.get("new") else 3 if p.get("waited") else 2 if p.get("busy")
+                    else 1 if p.get("failed") else 0)
     return VERDICTS[worst]
 
 
@@ -427,11 +543,14 @@ def part_text(p: dict) -> str:
         return f"{p['name']} BUSY ({p['reason']})"
     if p.get("error"):
         return f"{p['name']} ERROR"
+    if p.get("waited") and "unjudged" not in p:  # nothing ran
+        return f"{p['name']} WAITED"
     if p.get("single") and not p.get("failed"):
         return f"{p['name']} ok"
     text = f"{p['name']} {p.get('passed', 0)}/{p.get('failed', 0)}"
     if p.get("failed"):
-        bits = [f"known {p['known']}"] + ([f"alone {p['green_alone']}"] if p["green_alone"] else []) + [f"new {len(p['new'])}"]
+        bits = ([f"known {p['known']}"] + ([f"alone {p['green_alone']}"] if p["green_alone"] else [])
+                + ([f"waited {p['unjudged']}"] if "unjudged" in p else []) + [f"new {len(p['new'])}"])
         text += f" ({', '.join(bits)})"
     return text
 
@@ -450,6 +569,11 @@ def details(r: dict) -> list[str]:
     for p in r["parts"]:
         if p.get("error"):
             lines.append(f"  ERROR {p['name']}: {p['error']} (log {p['log']})")
+        if p.get("waited"):
+            done = f"{p['unjudged']} red(s) unjudged" if "unjudged" in p else "nothing ran"
+            lines.append(f"  WAITED {p['name']}: {p['waited']}: {done}; run again when the holder is done")
+        if p.get("moved"):
+            lines.append(f"  MOVED {p['name']}: {p['moved']}")
         for item in p.get("new", []):
             alone = f", alone {item['alone']}" if item.get("alone") else ""
             lines.append(f"  NEW {p['name']} {item['id']}{alone}: {item['error']} (log {p['log']})")
@@ -655,6 +779,8 @@ def main(argv=None) -> int:
         group.add_argument("--all", action="store_true", help="every part")
         group.add_argument("--only", nargs="+", help="quiet: part names or test files (a part's `match`); never shippable")
         p.add_argument("--no-remote", action="store_true", help="this machine only: no part on the remote machine")
+        p.add_argument("--stack", type=int, help="each locked part on the Nth lock of its `lock` list, never moved "
+                                                  "(without it a --only run takes a free one by itself)")
         if name == "run":
             p.add_argument("--keep", action="store_true", help="keep the export (.work/ci/src/<sha8>)")
         else:
@@ -687,7 +813,9 @@ def main(argv=None) -> int:
     if a.no_remote:
         config = {**config, "no_remote": True}
     picked = [p["name"] for p in config["parts"]] if a.all else a.parts
-    plan = build_plan(config, sha, a.base or config["base"], picked, getattr(a, "only", None))
+    if a.stack is not None and a.stack < 1:
+        raise SystemExit("--stack: 1 or more")
+    plan = build_plan(config, sha, a.base or config["base"], picked, getattr(a, "only", None), a.stack)
     if a.cmd == "plan":
         print(json.dumps(plan, indent=1) if a.json else describe(plan))
         return 0

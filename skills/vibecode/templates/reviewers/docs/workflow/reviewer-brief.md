@@ -56,6 +56,6 @@ Edit nothing, commit nothing, run no tests, start no containers, touch no other 
 | `GREEN WITH NOTES` | fix your own minors and nits in the **executor's worktree** (the path you were given), a trivial major too (a one-line test fix), one commit, then the same as `GREEN` |
 | `CHANGES NEEDED` | stop; edit nothing. The finding goes back to the executor, who knows the design; a fresh reviewer then checks only the delta (`review-2.md`) |
 
-**The gate** is `python -I -X utf8 tools/ci/gate.py run <head>` (foreground, long timeout; `tools/ci/README.md`)<!-- if:e2e -->, e2e under its lock<!-- endif -->. `BUSY`: wait for the notice, then again; a red: run it alone; a red your own fix caused is yours. If a fix of yours turns out bigger than you thought, revert it and mark that finding `major`.
+**The gate** is `python -I -X utf8 tools/ci/gate.py run <head>` (foreground, long timeout; `tools/ci/README.md`)<!-- if:e2e -->, e2e under its lock<!-- endif -->. `BUSY`/`WAITED` (a lock stayed held; nothing ran): wait for the notice, then again; a red: run it alone; a red your own fix caused is yours. If a fix of yours turns out bigger than you thought, revert it and mark that finding `major`.
 
 Answer in at most 8 lines: `READY TO MERGE <id> head=<sha>` or the verdict, the count per severity, and the top three findings in one line each.

@@ -2,6 +2,7 @@
  "_doc": "The gate's parts (tools/ci/README.md). The bootstrap batch fills in each empty cmd; a part with no cmd is an ERROR.",
  "base": "origin/main",
  "lock_minutes": 50,
+ "wait_minutes": 180,
  "setup": "",
  "docs_only": ["docs/*", "*.md"],
  "parts": [

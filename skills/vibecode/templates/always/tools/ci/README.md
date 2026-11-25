@@ -11,6 +11,7 @@ python tools/ci/gate.py run <sha>               # the gate (foreground, one call
 python tools/ci/gate.py status <sha>            # the last run's line again
 python tools/ci/gate.py ship <sha> --batch <id> --what "<what>" --try "<try>" [--dry-run]
 python tools/ci/gate.py run --only unit tests/test_x.py   # a lane's quiet run: <= 15 lines, never shippable
+python tools/ci/gate.py run <sha> --stack 2     # each locked part on the 2nd lock of its `lock` list
 ```
 
 - **Status line:** `GATE <sha8> <VERDICT> 2m52s | types ok | unit 3593/0 | e2e 151/5 (known 4, alone 1, new 0) | shipped: no`.
@@ -21,10 +22,23 @@ python tools/ci/gate.py run --only unit tests/test_x.py   # a lane's quiet run: 
     An unlisted red green alone 2 of 2 is named **new-flaky** (in the line, the json and the ship's line): whoever ships
     lists it in `known-reds.json` as a `flake` with its `docs/QUESTIONS.md` row.
   - `NEW-RED`: a red the batch owns.
-  - `BUSY`: a `heavy` part was skipped (a listed process runs) or its lock stayed held `lock_minutes`. Run again later.
+  - `WAITED`: a part's lock stayed held past `wait_minutes` (180) and the part never ran: `WAITED e2e: 180 min for e2e,
+    held by <who> since <time>` under the line. No test counted red; run again when the holder is done. A wait of the
+    runs alone does the same: their reds are `unjudged` (`e2e 5/2 (known 1, waited 1, new 0)`), never NEW.
+  - `BUSY`: a `heavy` part was skipped (a listed process runs). Run again later.
   - `ERROR`: the gate or a runner broke (no JUnit report, a timeout, exit non-zero with no red, no `cmd` set). Read the log.
 - **Options:** `--parts a b` (these parts whatever the diff), `--all`, `--base <rev>` (what the diff is measured against;
-  default `origin/main`), `--no-remote` (this machine only), `--keep` (keep the export). Unknown arguments are an error.
+  default `origin/main`), `--no-remote` (this machine only), `--keep` (keep the export), `--stack N` (below). Unknown
+  arguments are an error.
+- **Locks and the clock:** a locked part takes its lock by trying, never by looking first; its `timeout` starts once
+  it holds it, so a wait of any length leaves it its whole budget. The wait has its own limit, `wait_minutes`. While it
+  waits, the console (stderr) says who holds it and since when, once per holder: `e2e: waiting for e2e, held by
+  lane-b since 2026-11-24T10:00:00`. Its own hold is kept fresh, so a part longer than `lock_minutes` is never taken
+  over as stale. Its command gets `CI_LOCK_HELD`, so `tools/work/lock.ps1`/`lock.sh` inside it run without waiting.
+- **Stacks:** a part whose `lock` is a list (`["e2e", "e2e2"]`: two copies of a test stack) runs on the first; `{lock}`
+  and `{stack}` (1, 2) in its commands, and `CI_LOCK`/`CI_STACK`, say which it got. A `--only` run takes the first
+  free one by itself (`MOVED e2e: e2e held by ...: ran on e2e2` under the line); both held, the first freed. The
+  full gate and a ship's never move. `--stack N` pins the Nth (a part with fewer keeps its first).
 - **Results:** `.work/ci/<sha8>.json` (parts, reds, skipped, `line`, `shipped`) and the logs in `.work/ci/<sha8>/`, in the
   main checkout. Read the line or `status`; open a log only for a red you fix, and then its tail.
 
@@ -40,12 +54,12 @@ The `bootstrap` batch fills each `cmd`. A part:
 | `rerun` | the command for one red alone: `{id}`, `{name}`, `{classname}`, `{file}` from the report |
 | `files_cmd`, `match` | `--only` with files: a file matching `match` runs `files_cmd` with `{files}`; `file:<line>` (one test by its line) matches as the file and is passed as given |
 | `timeout` | minutes; past it the part's process tree is killed and the part is ERROR |
-| `lock` | a machine lock name (the same `.work/<name>.lock` as `tools/work/lock.ps1` / `lock.sh`); waits up to `lock_minutes` |
+| `lock` | a machine lock name (the same `.work/<name>.lock` as `tools/work/lock.ps1` / `lock.sh`), or a list of them (stacks, above); waits up to `wait_minutes` |
 | `heavy` | BUSY instead of a run while a process in `busy.processes` runs (a game, a render, another benchmark) |
 | `docker` | run inside the compose service (`docker.compose`, `docker.service`), the export mounted at `/src` |
 | `remote` | run on the second machine over ssh (`remote`: `name`, `ssh`, `repo`, `git`); the sha is pushed there first |
 
-Top level: `base`, `lock_minutes` (50), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
+Top level: `base`, `lock_minutes` (50: a hold older is stale), `wait_minutes` (180: a longer wait is WAITED), `setup` (once per export, e.g. installing dependencies), `docs_only` (globs of a
 diff that redeploys nothing), `ship.deploy` (the command that redeploys the owner's app), `ship.health` (a URL that
 must answer 200 after it). This machine's overrides go in `.work/ci/machine.json` (git-ignored, merged over `ci.json`):
 `name`, `busy`, `remote`, `ship`, `autodeploy` (below), `timeouts` per part.
