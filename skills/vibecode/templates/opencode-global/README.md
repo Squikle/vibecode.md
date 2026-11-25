@@ -12,6 +12,7 @@ files), prints what to add to your configs, and **never edits `opencode.jsonc` o
 | `opencode.snippet.jsonc` | printed, you merge it | config | compaction at ~70% of a per-model `limit.input`, a small kept tail, lane aliases |
 | rtk | its own install | server plugin | ~58% of `git log`, ~46% of `git status` output |
 | `plugins/pacer/` | `plugins/pacer/` | server plugin + TUI part (`/pacer`), one folder, no `cli.json` line | model calls: wake-ups in a busy session wait and go out as one call; usage paced against the plan's limits |
+| `plugins/news/` | `plugins/news/` | server plugin + TUI part (`/todo`), one folder, no `cli.json` line | your attention: what waits on you is a list with a footer count, not something to dig out of a long chat; 0 model tokens |
 
 ## prompt-polish
 
@@ -55,6 +56,28 @@ upstream: https://github.com/Squikle/ctxpick (994c991); update by recopying
 - One folder: the server part (`index.js`, `pacer.py`) and the TUI part (`tui.js`, `tui-core.js`, `footer.jsx`,
   `rpc.js`) load from beside each other, so no `cli.json` line. Restart OpenCode, then the TUI. Needs python.
 - Tests stay in the kit (`tests/pacer/`, with a test-only `node_modules` stub); `deploy.py --global` never copies them.
+
+## todo (news)
+
+- Ported from the source project's live copy. **The newest batch (click to check, ctrl+o, ←/→, FYI groups) is live
+  there but not yet tried by its user**.
+- **The marker.** The coordinator (any top-level session) writes one line per item in its reply text, no tool call:
+  `📌 [<tag>] <kind>: <short text>`, kind = `waits on you` (alias `waits`), `bug` or `news`; tag =
+  `[a-z0-9][a-z0-9._-]{0,39}`. The same tag again updates the item, never duplicates it. A marker inside a code
+  fence or inline code is not an item. `📌 [<tag>] done` closes it: a walked wait is checked by "walk", an FYI
+  from its own session by "ai". Child sessions are ignored.
+- **Open** = waits on you (the counts, the footer, the walk). Bugs and news are FYI rows grouped under them.
+- **`/todo`** opens the pop-up (open / history / toasts views). Click or Enter checks a row (in history: un-checks)
+  and moves to the next one; **ctrl+o** opens the item's session; **← / →** slide a long row's text, Home goes back.
+- **The walk:** ctrl+s (or its row, open view only) puts one prompt into the session you are in: "walk me through"
+  the open waits. That press is the plugin's only send; everything else just reads and writes its files.
+- Sidebar: the top 5 waits and one `FYI: N bugs, M news (/todo)` line. Footer: `📌 N waits on you` (`📌 FYI` when
+  only FYI is left), a left click opens `/todo`. A toast per new item.
+- **Data:** `~/.local/share/news` (`$NEWS_DATA` overrides): `items.json` and `dones.json` (written only by the
+  server part), `checks.json`, `toasts.json`, `walk.json` (written only by the TUI part), `tui.log`. Read-only toward
+  OpenCode; fails open (errors are logged, never thrown).
+- One folder: `index.js`, `news-core.js`, `tui.js`, `panel.jsx`. Restart OpenCode, then the TUI. Tests stay in the
+  kit (`node --test tests/news/`).
 
 ## rtk
 

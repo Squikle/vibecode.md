@@ -55,6 +55,9 @@ def install_global(args: list) -> int:
         print("pacer: no cli.json line (its TUI files load from beside index.js); restart OpenCode, then the TUI.")
         print("  Everything is off until `/pacer`. Needs python (python3 off Windows; $PACER_PYTHON overrides).")
         print("  How it works: " + (kit / "pacer.md").as_posix())
+    if (kit / "plugins" / "news").is_dir():
+        print("todo (news): no cli.json line; restart OpenCode, then the TUI. `/todo` opens the list of 📌 lines.")
+        print("  How it works: " + (kit / "README.md").as_posix() + " (section: todo)")
     print("\nMerge by hand into " + (home / "opencode.jsonc").as_posix() + " (deploy never edits it):\n")
     print((kit / "opencode.snippet.jsonc").read_text(encoding="utf-8"))
     return 0

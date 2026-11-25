@@ -134,7 +134,7 @@ flowchart TB
 
 | Piece | Where it lives | Row |
 |---|---|---|
-| prompt-polish, pacer, ctxpick | `templates/opencode-global/` (your OpenCode config, not the project) | 34, 33, 35 |
+| prompt-polish, pacer, ctxpick, todo (news) | `templates/opencode-global/` (your OpenCode config, not the project) | 34, 33, 35, 47 |
 | coord-beat, review-pack | `tools/work/` | 32, 26 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
 | vaultify and its git hook | `tools/vault/` | 28 |
@@ -194,7 +194,8 @@ cp commands/vibecode.md ~/.config/opencode/commands/
 Claude Code users may put the skill in `~/.claude/skills/` instead.
 
 **Optional, for your own OpenCode** (not per project): `python -I -X utf8 skills/vibecode/scripts/deploy.py --global`
-installs the prompt-polish plugin, the ctxpick TUI plugin and the pacer into your OpenCode config folder where missing,
+installs the prompt-polish plugin, the ctxpick TUI plugin, the pacer and the todo list (`/todo`, the coordinator's
+📌 lines) into your OpenCode config folder where missing,
 then prints the `cli.json` line and a compaction config snippet to merge by hand. It never edits your configs. Details:
 `skills/vibecode/templates/opencode-global/README.md`; how the pacer batches and paces:
 `skills/vibecode/templates/opencode-global/pacer.md`.
