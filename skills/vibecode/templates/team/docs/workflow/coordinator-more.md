@@ -4,10 +4,10 @@ The details behind `coordinator.md`'s pointers: read a section once when one poi
 
 ## 1. Session care
 
-- **Merges and reviews before new builders:** a `READY TO MERGE` gets its integrator and a `READY FOR REVIEW` its reviewer before you spawn a new executor. A finished batch left waiting drifts from `main`; a new one only adds load.
+- **Merges and reviews before new builders:** a `READY TO MERGE` gets its integrator and a `READY FOR REVIEW` its reviewer before you spawn a new executor. A finished batch left waiting drifts from `main`.
 - **Keep-alive for a child waiting idle** (its answer given, its next job not ready yet, such as an executor whose review may come back): a one-word `keep-alive` every **50-55 minutes**, answered `ok` with no tools. The cache stays warm up to ~60 minutes, cold after; one poke re-reads the child's context at the cached price. No job coming: retire it.
-- **Retire, don't resume, a long-idle builder:** cold (over ~1 hour) or over 125k is a fresh session with a pointer brief (worktree, head, where it stopped, what is left), never a resume of the old chat.
-- **The ledger's life:** `.work/<id>/progress.md` is deleted once its batch is MERGED (after its `SHIP .. OK`) or retired. A stale one misleads the next resume.
+- **Retire, don't resume, a long-idle builder:** cold (over ~1 hour) or over 125k is a fresh session with a pointer brief (worktree, head, where it stopped, what is left), never a resume.
+- **The ledger's life:** `.work/<id>/progress.md` is deleted once its batch is MERGED (after its `SHIP .. OK`) or retired.
 - **A usage-limit pause:** each child stops its runs (frees the locks), makes a WIP commit (no stash) and answers `PAUSED <id> <sha> <where>`; `keep-alive` gets `ok` with no tools; `resume` restarts the work.
 
 ## 2. Merge paths
@@ -36,9 +36,9 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 ## 5. The checkpoint and the handover
 
-- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions as a table, `| Role | Tag | Session | Batch | Next |`, which `tools/vault/vault_now.py` turns into the vault's Now note; machines; next moves), rewritten at every checkpoint. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
-- **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, ask the owner for `/pacer on` in this session, adopt the running children, carry on with the next moves." When the owner asks for that prompt, show it; they start the session.
-- **The old coordinator goes idle first:** two coordinators both spawn.
+- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions as a table, `| Role | Tag | Session | Batch | Next |`, which `tools/vault/vault_now.py` turns into the vault's Now note; machines; next moves), rewritten at every checkpoint. A lesson edits the rule it changes, one line, no stories; compact it past ~25 KB. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
+- **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, recreate your automations, ask the owner for `/pacer on` here, adopt the running children, carry on with the next moves." When the owner asks for that prompt, show it; they start the session.
+- **The old coordinator goes idle first:** two coordinators both spawn. The new one logs `HANDOVER: <new id> took over`; the old checks for it before acting on a late result. Automations steer the session that made them: the new one recreates its own.
 - **Adopt the children:** a background result goes to the session that spawned it. Send each running child one line with your session id ("report to me from now on; carry on"). Until you have children of your own, run `coord-beat.py --parent <old id>`.
 
 ## 6. Talking to the owner
@@ -56,12 +56,12 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **One step, many calls:** independent calls go in one step; a sequence you can plan is one script with its branches written in. Every step re-sends your whole context.
 - **Lookups:** a grep when it is cheaper than a helper; else **one** `{{M_HELPER}}` helper takes all the questions at once (n questions, one cold start), spawned in a step with your other calls. A cheap helper for a non-critical question is fine.
-- **No change for its own sake:** weigh a change, or say in a line why the current setup is already the best.
+- **No change for its own sake:** weigh it, or say in a line why the current setup is best.
 - **Small doc and data fixes you do yourself** (a status line, a count, a typo); this overrides "small doc fixes wait for the librarian". Read code only to route (which files, "Same files as").
 - **Fill every property that is cheap to fill:** links, the `--from` cause, `From:` lines. A missing one costs a lookup later.
-- **Briefs pass paths, not copies** (`docs/workflow/lane-brief.md`, `lane-more.md` by section, `reviewer-brief.md`, `integrator-brief.md`), and **while `main` is unpushed, your local main's sha**, never `origin/main`: a stale origin made a reviewer's merge a no-op.
+- **Briefs pass paths, not copies** (`docs/workflow/lane-brief.md`, `lane-more.md` by section, `reviewer-brief.md`, `integrator-brief.md`), and **while `main` is unpushed, your local main's sha**, never `origin/main` (it can be stale).
 - **Your reads:** never grep `.work` wide, name the file; never the metrics data or page; a shell's `.out` by tail or a `FAIL|ERROR` grep; the role docs once per session, then pointers.
-- **Audits unasked**, and verify a smell against the session itself (`session-audit.py`) before fixing it. Tools: `tokens-since.py` (what was spent since a time), `cache-ttl.py` (how long the cache stayed warm), `union.py` (merge two lists or ledgers line-wise).
+- **Audits unasked**, and verify a smell against the session itself (`session-audit.py`) before fixing it. Tools: `tokens-since.py` (spend since a time), `cache-ttl.py` (cache warmth), `union.py` (line-wise merge of two lists or ledgers).
 
 ## 8. Pace
 
