@@ -3,7 +3,7 @@
 You are an independent reviewer of one batch, in a fresh session. You did not build it and owe the builder nothing. Decide whether the change is correct, sensible and well designed **before** its slow tests run: send it back, or carry it to the merge yourself. A reviewer that waves things through is worse than none.
 
 **Start reads** (at most 60 KB): `AGENTS.md#1`, `AGENTS.md#3`, `docs/workflow/reviewer-brief.md`.
-Read this brief and each big doc once, in one call, from the worktree you are given (or `git show origin/main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
+Read this brief and each big doc once, in one call, from the worktree you are given (or `git show main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
 
 **Your first read is the review pack:** `python -I -X utf8 tools/work/review-pack.py <branch>` (`--base <sha>` for a stacked batch: the commit its own work starts from; `--id <folder>` when the report is elsewhere). It prints `PACK ... -> <path>`: read `pack.md`, `pack-2.md`, ... whole, one read each, and nothing it holds again (gate line, commits, stat, report, spec, map rows, diffs). A file under "Not shown" only when a finding needs it, by the command on its line.
 

@@ -2,7 +2,7 @@
 """The local CI gate (`tools/ci/README.md`): one call per sha, one status line. Stack-agnostic: `tools/ci/ci.json`
 names the parts (test kinds), their commands, the paths that trigger each and where its JUnit report lands.
 
-    python tools/ci/gate.py plan [sha] [--base origin/main] [--parts a b] [--no-remote]   what would run, and why
+    python tools/ci/gate.py plan [sha] [--base main] [--parts a b] [--no-remote]   what would run, and why
     python tools/ci/gate.py run [sha] [same options] [--keep]       the gate: `.work/ci/<sha8>.json` + one line
     python tools/ci/gate.py run [sha] --only unit tests/test_x.py   quiet (<= 15 lines), never shippable
     python tools/ci/gate.py run [sha] ... --stack 2                 each locked part on its 2nd lock (a `lock` list)
@@ -38,7 +38,7 @@ NO_WINDOW = 0x08000000 if WINDOWS else 0
 QUIET_LINES = 15
 SHIPPABLE = ("GREEN", "KNOWN-RED")
 VERDICTS = ("GREEN", "KNOWN-RED", "BUSY", "WAITED", "NEW-RED", "ERROR")  # the worst found wins
-DEFAULTS = {"base": "origin/main", "lock_minutes": 50, "wait_minutes": 180, "parts": [], "busy": {"processes": []},
+DEFAULTS = {"base": "", "lock_minutes": 50, "wait_minutes": 180, "parts": [], "busy": {"processes": []},
             "docs_only": ["docs/*", "*.md"], "ship": {}, "cpu_slots": 3, "cpu_max": 90, "software_slots": 1}
 LOG_TAIL = 40  # lines of a failed part's log kept in its error
 
@@ -81,6 +81,15 @@ def git(*args, cwd=None) -> str:
     return done.stdout.strip()
 
 
+def default_base(cwd=None) -> str:
+    """What a diff is measured from when neither `--base` nor ci.json's `base` says: the local `main`, which merges
+    land on and which may be pushed late (a lane's diff from `origin/main` would hold the merged, unpushed batches);
+    `origin/main` only where the repository has no `main`. Where `origin/main` holds commits `main` lacks, the diff
+    from `main` only grows: a plan is never too small."""
+    ok = run(["git", "rev-parse", "--verify", "--quiet", "refs/heads/main"], cwd=cwd or HERE).returncode == 0
+    return "main" if ok else "origin/main"
+
+
 def main_tree() -> Path:
     """The main checkout: the folder that holds the shared `.git` (its `.work/` holds results, logs and locks)."""
     common = git("rev-parse", "--path-format=absolute", "--git-common-dir", cwd=HERE)
@@ -110,8 +119,21 @@ def matches(path: str, globs: list[str]) -> bool:
 
 # ---------------------------------------------------------------- plan
 
-def changed_files(sha: str, base: str) -> list[str]:
-    return git("diff", "--name-only", f"{git('merge-base', base, sha)}", sha).split()
+def merge_base(sha: str, base: str, cwd=None) -> str:
+    """What `sha`'s diff is measured from: its merge base with `base`; a sha already in `base` (a merge on `main`, the
+    default base) from its first parent, as the integrator's `git diff --name-only <merge>^1 <merge>`."""
+    since = git("merge-base", base, sha, cwd=cwd)
+    if since != git("rev-parse", sha, cwd=cwd):
+        return since
+    parent = run(["git", "rev-parse", "--verify", "--quiet", f"{sha}^1"], cwd=cwd)
+    return parent.stdout.strip() if parent.returncode == 0 else EMPTY_TREE  # a root commit: all its files
+
+
+EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's empty tree
+
+
+def changed_files(sha: str, since: str) -> list[str]:
+    return git("diff", "--name-only", since, sha).split()
 
 
 def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only: list[str] | None,
@@ -137,9 +159,10 @@ def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only
         for name, fs in files.items():
             parts.append({**known[name], "files": fs})
             why[name] = "--only"
-        mode, changed = "only", []
+        mode, changed, since = "only", [], ""
     else:
-        changed = changed_files(sha, base)
+        since = merge_base(sha, base)
+        changed = changed_files(sha, since)
         for p in config["parts"]:
             if picked is not None:
                 if p["name"] in picked:
@@ -169,12 +192,12 @@ def build_plan(config: dict, sha: str, base: str, picked: list[str] | None, only
     if stack and not any(len(p.get("locks", [])) >= stack for p in parts):
         raise SystemExit(f"--stack {stack}: no part of this run has a lock {stack} (a `lock` list in tools/ci/ci.json); "
                          "run without --stack")
-    return {"sha": sha, "base": base, "mode": mode, "files": len(changed), "parts": parts, "why": why, "skipped": skipped,
+    return {"sha": sha, "base": base, "since": since, "mode": mode, "files": len(changed), "parts": parts, "why": why, "skipped": skipped,
             "options": {"no_remote": bool(config.get("no_remote")), **({"stack": stack} if stack else {})}}
 
 
 def describe(plan: dict) -> str:
-    lines = [f"PLAN {plan['sha'][:8]} ({plan['mode']}, {plan['files']} files vs {plan['base'] or '-'})"]
+    lines = [f"PLAN {plan['sha'][:8]} ({plan['mode']}, {plan['files']} files since {(plan.get('since') or '-')[:8]} ({plan['base'] or '-'}))"]
     for p in plan["parts"]:
         where = "remote" if p.get("remote") else "docker" if p.get("docker") else "host"
         extra = f" files={' '.join(p['files'])}" if p.get("files") else ""
@@ -365,7 +388,7 @@ def since(text: str) -> str:
 
 CPU_S = 3.0  # the CPU's sample
 SLOT_STALE_S = 6 * 3600  # a slot older than this is dead even if its pid lives
-PID = re.compile(r"^pid (\d+)$", re.M)
+PID = re.compile(r"^pid (\d+)\s*$", re.M)  # `\s*`: a file read as bytes keeps Windows' `\r`
 
 
 def cpu_percent(seconds: float = CPU_S) -> float:
@@ -430,23 +453,30 @@ def started(pid: int) -> float | None:
 CPU, ALIVE, STARTED = cpu_percent, alive, started  # tests give their own
 
 
-def live(path: Path, text: str) -> bool:
-    """A slot's gate still runs: its pid lives and started before the slot was written (else the pid is another
-    process's now: pids are reused), and the slot is under `SLOT_STALE_S` old (one with no pid yet is being written,
-    unless it is older than a minute)."""
-    try:
-        age = time.time() - path.stat().st_mtime
-    except OSError:
-        return False
+def runs(text: str, written: float, now: float, alive=None, started=None) -> bool:
+    """The one liveness rule for a pid file (a CPU slot, a run's `gate.pid`; `tools/vault/vault_now.py` reads it too):
+    its pid lives, started before the file was written (else the pid is another process's now: pids are reused), and
+    the file is under `SLOT_STALE_S` old (one with no pid yet is being written, unless it is older than a minute).
+    `alive` and `started` are the callers' test seams."""
+    age = now - written
     if age > SLOT_STALE_S:
         return False
     pid = PID.search(text)
     if not pid:
         return age < 60
-    if not ALIVE(int(pid.group(1))):
+    if not (alive or ALIVE)(int(pid.group(1))):
         return False
-    born = STARTED(int(pid.group(1)))
-    return born is None or born <= time.time() - age + 2  # 2 s: the clocks' grain
+    born = (started or STARTED)(int(pid.group(1)))
+    return born is None or born <= written + 2  # 2 s: the clocks' grain
+
+
+def live(path: Path, text: str) -> bool:
+    """A slot's gate still runs (`runs`)."""
+    try:
+        written = path.stat().st_mtime
+    except OSError:
+        return False
+    return runs(text, written, time.time())
 
 
 def loads(part: dict) -> bool:
@@ -1035,7 +1065,7 @@ def main(argv=None) -> int:
     for name in ("plan", "run"):
         p = sub.add_parser(name)
         p.add_argument("sha", nargs="?", default="HEAD")
-        p.add_argument("--base", help="what the diff is measured against (default: ci.json's base, origin/main)")
+        p.add_argument("--base", help="what the diff is measured against (default: ci.json's base, else local main, else origin/main)")
         group = p.add_mutually_exclusive_group()
         group.add_argument("--parts", nargs="+", help="these parts only, whatever the diff")
         group.add_argument("--all", action="store_true", help="every part")
@@ -1077,7 +1107,7 @@ def main(argv=None) -> int:
     picked = [p["name"] for p in config["parts"]] if a.all else a.parts
     if a.stack is not None and a.stack < 1:
         raise SystemExit("--stack: 1 or more")
-    plan = build_plan(config, sha, a.base or config["base"], picked, getattr(a, "only", None), a.stack)
+    plan = build_plan(config, sha, a.base or config["base"] or default_base(), picked, getattr(a, "only", None), a.stack)
     if a.cmd == "plan":
         print(json.dumps(plan, indent=1) if a.json else printable(describe(plan)))
         return 0

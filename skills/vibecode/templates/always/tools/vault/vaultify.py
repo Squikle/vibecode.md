@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The docs of a git revision -> an Obsidian vault (any version; plain Markdown and frontmatter). Zero LLM, stdlib only.
 
-python -I -X utf8 tools/vault/vaultify.py [--rev origin/main] [--vault <dir>] [--repo <dir>] [--if-changed] [--src <dir>]
+python -I -X utf8 tools/vault/vaultify.py [--rev main] [--vault <dir>] [--repo <dir>] [--if-changed] [--src <dir>]
 python -I -X utf8 tools/vault/vaultify.py [--vault <dir>] --resolve <path>   (a conflict you merged by hand, taken back)
 
 Reads only git (`git archive <rev> docs AGENTS.md`); `--src <dir>` reads a plain folder instead (tests). Writes only under
@@ -39,6 +39,12 @@ ID = re.compile(r"`([\w.-]+)`")
 
 def git(repo, *args) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, creationflags=NO_WINDOW)
+
+
+def default_rev(repo) -> str:
+    """The gate's base rule (`tools/ci/gate.py` `default_base`, kept apart: this folder also runs copied alone, as
+    `integrate.py`'s vault check): local `main`, else `origin/main`."""
+    return "main" if git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/main").returncode == 0 else "origin/main"
 
 
 def tool_hash() -> str:
@@ -191,7 +197,7 @@ def main(argv=None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser(description="Build the Obsidian vault of the docs (reads git only, writes only the vault).")
-    ap.add_argument("--rev", default="origin/main")
+    ap.add_argument("--rev", help="git revision to build from (default: local main, else origin/main)")
     ap.add_argument("--vault", help="default: <main tree>/.work/vault")
     ap.add_argument("--repo", default=str(HERE.parents[1]))
     ap.add_argument("--if-changed", action="store_true")
@@ -207,7 +213,7 @@ def main(argv=None) -> int:
     if a.src:
         rev = "src"
     else:
-        r = git(a.repo, "rev-parse", "--short=8", "--verify", a.rev + "^{commit}")
+        r = git(a.repo, "rev-parse", "--short=8", "--verify", (a.rev or default_rev(a.repo)) + "^{commit}")
         if r.returncode:
             raise SystemExit("git rev-parse failed: " + r.stderr.decode("utf-8", "replace").strip())
         rev = r.stdout.decode().strip()

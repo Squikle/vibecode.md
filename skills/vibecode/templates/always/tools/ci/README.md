@@ -28,7 +28,7 @@ python tools/ci/gate.py run <sha> --stack 2     # each locked part on the 2nd lo
   - `BUSY`: a `heavy` part was skipped (a listed process runs). Run again later.
   - `ERROR`: the gate or a runner broke (no JUnit report, a timeout, exit non-zero with no red, no `cmd` set). Read the log.
 - **Options:** `--parts a b` (these parts whatever the diff), `--all`, `--base <rev>` (what the diff is measured against;
-  default `origin/main`), `--no-remote` (this machine only), `--keep` (keep the export), `--stack N` (below). Unknown
+  default: ci.json's `base`, else local `main`, else `origin/main`: merges land on local main, pushed late), `--no-remote` (this machine only), `--keep` (keep the export), `--stack N` (below). Unknown
   arguments are an error.
 - **Locks and the clock:** a locked part takes its lock by trying, never by looking first; its `timeout` starts once
   it holds it, so a wait of any length leaves it its whole budget. The wait has its own limit, `wait_minutes`. While it

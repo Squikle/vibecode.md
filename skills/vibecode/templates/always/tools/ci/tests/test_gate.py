@@ -41,6 +41,33 @@ class Slots(Base):
         gate.STARTED, gate.ALIVE = (lambda pid: None), (lambda pid: False)
         self.assertFalse(gate.live(path, gate.hold_text(path)))
 
+    def test_one_liveness_rule_reads_a_crlf_pid_file(self):
+        """`runs` is the slots' and `gate.pid`'s one rule; a file read as bytes keeps Windows' `\\r`."""
+        t = time.time()
+        self.assertTrue(gate.runs("pid 4242\r\nsession s\r\n", t - 10, t))
+        self.assertFalse(gate.runs("pid 4242\r\n", t - 10, t, alive=lambda pid: False))
+        self.assertFalse(gate.runs("pid 4242\r\n", t - 10, t, started=lambda pid: t))          # the pid reused
+        self.assertFalse(gate.runs("pid 4242\n", t - gate.SLOT_STALE_S - 1, t))                # too old
+        self.assertTrue(gate.runs("who\n", t - 5, t) and not gate.runs("who\n", t - 120, t))   # no pid yet
+
+    def test_the_default_base_is_local_main(self):
+        import subprocess
+        repo = self.main / "repo"
+        repo.mkdir()
+        git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, check=True)
+        git("init", "-q", "-b", "trunk")
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x")
+        self.assertEqual(gate.default_base(str(repo)), "origin/main")                      # no local main
+        git("branch", "main")
+        self.assertEqual(gate.default_base(str(repo)), "main")
+        first = gate.git("rev-parse", "HEAD", cwd=str(repo))
+        self.assertEqual(gate.merge_base(first, "main", cwd=str(repo)), gate.EMPTY_TREE)  # a root commit in main
+        git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "y")
+        tip = gate.git("rev-parse", "HEAD", cwd=str(repo))
+        self.assertEqual(gate.merge_base(tip, "main", cwd=str(repo)), first)    # a lane ahead of main: the fork
+        git("branch", "-f", "main", tip)
+        self.assertEqual(gate.merge_base(tip, "main", cwd=str(repo)), first)    # already in main: its first parent
+
     def test_full_slots_wait_then_waited(self):
         self.slot_file("cpu", 1, f"gate-aaaa 2026-01-01T00:00:00\npid {os.getpid()}")
         slot = gate.Slot(self.config, "cpu", 1, "gate-bbbb", "unit", top=90)
@@ -145,13 +172,14 @@ class Locks(Base):
 
     def test_full_gate_takes_any_free_stack(self):
         self.config.update({"parts": [{"name": "e2e", "lock": ["e2e", "e2e2"], "paths": ["*"]}]})
-        keep = gate.changed_files
-        gate.changed_files = lambda sha, base: ["a.py"]
+        keep = gate.changed_files, gate.merge_base
+        gate.changed_files, gate.merge_base = (lambda sha, since: ["a.py"]), (lambda sha, base: "e" * 40)
         try:
             full = gate.build_plan(self.config, "f" * 40, "origin/main", None, None)
             pinned = gate.build_plan(self.config, "f" * 40, "origin/main", None, None, stack=2)
         finally:
-            gate.changed_files = keep
+            gate.changed_files, gate.merge_base = keep
+        self.assertIn("since eeeeeeee (origin/main)", gate.describe(full).splitlines()[0])
         self.assertEqual(full["parts"][0]["try_locks"], ["e2e", "e2e2"])
         self.assertEqual(pinned["parts"][0]["try_locks"], ["e2e2"])
 

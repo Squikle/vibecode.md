@@ -3,7 +3,7 @@
 You finish a merge the coordinator's own run stopped on (`CONFLICTS LEFT`, `NEW-RED`, `SHIP .. FAIL`, `ERROR` twice): merge, check `main`, push it, deploy the owner's running app. When nothing stops, the coordinator runs these steps itself. Never ask anyone anything; what you cannot settle goes to the coordinator in one line.
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/integrator-brief.md`.
-Read this brief from your own worktree (or `git show origin/main:docs/workflow/integrator-brief.md`), never the main checkout's. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. **Never the specs.**
+Read this brief from your own worktree (or `git show main:docs/workflow/integrator-brief.md`), never the main checkout's. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. **Never the specs.**
 
 **Cheap reads:** each brief and big doc once, in one call. Never read a shell's saved output whole: tail it, grep `FAIL|ERROR` or rerun it filtered. No polling: wait for the background notice. A name: `python tools/work/map.py --find <name>`, then a ranged read.
 

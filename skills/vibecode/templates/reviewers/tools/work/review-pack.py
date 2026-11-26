@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The pages a reviewer reads first: `python -I -X utf8 tools/work/review-pack.py <branch> [--base origin/main]`.
+"""The pages a reviewer reads first: `python -I -X utf8 tools/work/review-pack.py <branch> [--base main]`.
 
 It writes `<main tree>/.work/<id>/pack.md` (the batch's folder: `<branch>`, or the folder whose `report.md` names the
 branch, or `--id`), and `pack-2.md`, ... when it needs more pages of `--cap` characters, and prints one line:
@@ -57,6 +57,13 @@ def git(repo: Path, *args: str, ok_missing: bool = False) -> str:
             return ""
         raise Fail(f"git {' '.join(args)}: {((done.stderr or done.stdout).strip().splitlines() or ['failed'])[0]}")
     return done.stdout
+
+
+def default_base(repo: Path) -> str:
+    """The gate's base rule (`tools/ci/gate.py` `default_base`): local `main` (merges land there, pushed late), else
+    `origin/main`."""
+    done = subprocess.run(["git", "rev-parse", "--verify", "--quiet", "refs/heads/main"], cwd=repo, capture_output=True)
+    return "main" if done.returncode == 0 else "origin/main"
 
 
 def main_tree(repo: Path) -> Path:
@@ -355,7 +362,7 @@ def page_name(n: int) -> str:
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="review-pack.py", description=__doc__.strip().splitlines()[0])
     p.add_argument("branch")
-    p.add_argument("--base", default="origin/main", help="what the branch is measured against (default origin/main)")
+    p.add_argument("--base", help="what the branch is measured against (default: local main, else origin/main)")
     p.add_argument("--id", help="the batch's .work folder name, when it is not the branch and no report names it")
     p.add_argument("--batch", nargs="*", default=[], help="more batch ids whose ROADMAP/BACKLOG rows to show")
     p.add_argument("--cap", type=int, default=CAP, help=f"a page's size in characters (default {CAP})")
@@ -365,7 +372,7 @@ def main(argv: list[str]) -> int:
     a = p.parse_args(argv)
     try:
         work = a.work or main_tree(a.repo) / ".work"
-        folder, texts, info = build(a.repo, work, a.branch, a.base, a.id, a.batch, a.cap, a.big)
+        folder, texts, info = build(a.repo, work, a.branch, a.base or default_base(a.repo), a.id, a.batch, a.cap, a.big)
     except (Fail, RuntimeError) as e:
         print(f"PACK {a.branch} FAIL {e}", file=sys.stderr)
         return 1

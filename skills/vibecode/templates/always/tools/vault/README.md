@@ -8,12 +8,13 @@ question, known red and merge, and the hub `index.md`. Zero LLM, stdlib only, Wi
 ## By hand
 
 ```
-python -I -X utf8 tools/vault/vaultify.py --rev origin/main
+python -I -X utf8 tools/vault/vaultify.py
 ```
 
 One JSON line: `written`, `merged`, `conflicts`, `deleted`, `misses` (a doc row of a shape it does not know: details on
 stderr), `batches`, `seconds`; exit 1 on a miss or a conflict. `--if-changed` exits at once when the last build was of
-the same rev by the same scripts. `--vault <dir>` puts it elsewhere.
+the same rev by the same scripts. `--vault <dir>` puts it elsewhere. `--rev` defaults to local `main`, else `origin/main`
+(the gate's base rule); the hook builds `--rev HEAD`.
 
 ## Your edits: merged, or a conflict
 
@@ -31,16 +32,23 @@ A note you edited whose source vanished is a conflict too (resolve it: the file 
 ## Now: the coordinator's jobs
 
 `vault_now.py` writes `Now.md` from `.work/coordinator-now.md`'s job tables (a header with a Batch column and a Next or
-State column): one row per job, in order (building, reviewing, gate, waiting, done), linked to its batch note, in roles
-and batch ids only: session ids dropped, code names read as "the <role> (<batch>)". The hub embeds it (`![[Now]]`);
+State column): one row per job, in order (building, reviewing, gate, idle, waiting, done), linked to its batch note,
+with its last sign of life (Seen), in roles and batch ids only: session ids dropped, code names read as "the <role> (<batch>)". The hub embeds it (`![[Now]]`);
 vaultify writes a stub once and never touches it again. It never fails (exit 0; one line per run in
 `.work/vault-now.log`). Refresh it with a no-model shell automation every 2 minutes:
 
 ```
-python -I -X utf8 tools/vault/vault_now.py --if-changed
+python -I -X utf8 tools/vault/vault_now.py --if-changed      # [--src <checkpoint>] [--vault <dir>] [--trees <worktrees>]
 ```
 
-`--if-changed` skips at once when the checkpoint, the script and the last vault build are as they were.
+- **Seen:** the newest of the batch's `progress.md`, `report.md`, `review*.md` in the main tree's `.work`, its
+  `progress.md` in `<trees>/<wt>/.work/<batch>/` (`--trees`, default `<main tree>-wt`), and its gates
+  (`.work/ci/<sha8>[.only]/gate.pid` of its session, Head sha or a sha in its current step: `ended` at the verdict,
+  `running`, `lost` with no verdict and a dead pid; the gate's own liveness rule, `gate.runs`). A running gate makes the
+  job `gate`; a building, reviewing or gate job with no trace or clock for 30 minutes (`IDLE_MIN`) is `idle`, and so is
+  the word `idle`. It only reads `.work`.
+- **Cheap:** `--if-changed` skips at once when the checkpoint, the script, the last vault build, Now.md's existence and
+  each job's state and Seen are as they were.
 
 ## The hook: it rebuilds when main moves
 
