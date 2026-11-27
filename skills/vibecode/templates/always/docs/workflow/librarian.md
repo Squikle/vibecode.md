@@ -20,7 +20,7 @@ In every clean stage after the CTO's sweep; when a doc passes its budget (sectio
 4. **History:** the handover keeps the state, not the story; old "where we are" text becomes one line per run in `docs/reports/`.
 5. **Duplicates:** a fact said twice stays in the doc that owns it; the other gets a pointer.
 6. **Temporary files:** tracked done plans are deleted; old reports move to `docs/reports/archive/`. Untracked (`.work/`): never delete; move what no running session uses to `.work/_trash/<date>/` and list it; the coordinator empties it after the owner's yes.
-7. **Vault misses** (`vault=<w>/<m>` with m over 0, or `miss:` lines from `python -I -X utf8 tools/vault/vaultify.py`): fix each named doc row to its table's shape. A right row of a new shape: one report line asking a builder to teach `vaultify.py` it.
+7. **Vault misses** (`vault=<w>/<m>` with m over 0, or `miss:` lines from `python -I -X utf8 tools/vault/vaultify.py`): fix each named doc row to its table's shape, and a committed log line (`docs/log/`) to `YYYY-MM-DD hh:mm TYPE text key=value` (`tools/vault/README.md`, Logs). A right row of a new shape: one report line asking a builder to teach `vaultify.py` it. Local logs (`log_misses`) are their writer's, never yours.
 
 ## 3. Budgets: what every session pays at its start
 

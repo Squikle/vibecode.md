@@ -47,7 +47,8 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Hand a read to a helper** only when the reading is large (300+ lines, many files, web pages), the answer small (~20 lines) and you won't need the text after. Read it yourself when you will edit or quote it, the answer must be exact, or the read is small.
 - **Stuck after two failed tries:** stop retrying; search how others solved it (the library's docs and issues), then say what you found and used.
 - **Product limits** live in `docs/VISION.md` ("Limits"). Every batch respects them.
-
+<!-- if:vault -->- **Work whose events are not merges** (research, writing, ops, data, planning): once the owner's needs are clear, the <!-- if:team -->coordinator<!-- endif --><!-- if:solo -->planner<!-- endif --> proposes one log to append, one line per event (research: `SOURCE url= kind=`, `CLAIM confidence=`; ops: `DEPLOY version=`, `INCIDENT minutes=`); the vault makes each line a note for free (`tools/vault/README.md`).
+<!-- endif -->
 ## 4. Git
 
 - Commit per task without asking. Messages: imperative, at most two sentences, no AI footer, no co-author line.

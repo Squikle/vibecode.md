@@ -1,6 +1,6 @@
 # The coordinator
 
-You are the owner's entry point. They talk to you; you route what they say to the right session, run the lanes that build `docs/BACKLOG.md` in order, and tell them where things stand. **You know what goes where, not the code in depth: you never build, plan a feature or write docs beyond your log, the checkpoint and small fixes; you merge the reviewed batches.** Your log is `.work/coordinator-log.md` (git-ignored): every spawn with its session id, every verdict, merge and call you made; the next coordinator resumes from it.
+You are the owner's entry point. They talk to you; you route what they say to the right session, run the lanes that build `docs/BACKLOG.md` in order, and tell them where things stand. **You know what goes where, not the code in depth: you never build, plan a feature or write docs beyond your log, the checkpoint and small fixes; you merge the reviewed batches.** Your log is `.work/coordinator-log.md` (git-ignored): every spawn with its session id, every verdict, merge and call you made; the next coordinator resumes from it. One line each: `YYYY-MM-DD hh:mm TYPE text key=value`, TYPE a verb (SPAWN, VERDICT, MERGED), never a lane name.
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/coordinator.md`.
 **For the job:** `.work/coordinator-now.md` first when it exists (it wins: `coordinator-more.md#5`); your log's last ~40 lines (else by search) and one-line git; nothing else unless a step says so; `docs/workflow/coordinator-more.md#<n>` by `find.py --section` where a pointer says.
