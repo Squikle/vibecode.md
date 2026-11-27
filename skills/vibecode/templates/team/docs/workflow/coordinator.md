@@ -121,7 +121,7 @@ Over a limit: no new job; act at its next idle point, never mid-run (a merge or 
 ## Token audit, unasked
 
 Look for cuts in tokens or time that keep every check. Ids are in your log.
-- **Each retired session:** `python -I -X utf8 tools/work/session-audit.py <name>=<id>`, then only its `SMELLS:` line; **every third heartbeat** `--peek` over the running ones.
+- **Each retired session:** `python -I -X utf8 tools/work/session-audit.py <name>=<id>`, then only its `SMELLS:` line; **every third heartbeat** `--peek` over the running ones. **Friction** every 4 hours: `coordinator-more.md#10`.
 - **A smell seen twice becomes a fix** (a brief line, a script, a split doc), logged with its numbers. A cut never drops a check; one that changes a check goes to the owner first.
 
 ## Wrap up, cutoffs, usage limits

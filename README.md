@@ -137,6 +137,7 @@ flowchart TB
 | prompt-polish, pacer, ctxpick, todo (news) | `templates/opencode-global/` (your OpenCode config, not the project) | 34, 33, 35, 47 |
 | coord-beat, review-pack | `tools/work/` | 32, 26 |
 | merge cause (`cause.py`, `merge-log.py --from`), cache-ttl, tokens-since, union | `tools/work/` | 46, 51 |
+| friction (environment errors lanes worked around, clustered) | `tools/work/friction.py` | 72 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
 | vaultify (docs and logs as notes, table views) and its git hook; the gate's history log | `tools/vault/`, `tools/ci/gate.py` | 28, 54, 71 |
 | rtk, compaction config | `AGENTS.md`; the compaction snippet from `deploy.py --global` | 10, 17, 36 |
