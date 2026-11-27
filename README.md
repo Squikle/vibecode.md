@@ -2,7 +2,7 @@
 
 An opencode skill and command that set up a fresh project folder for a **multi-agent build**: you talk to one coordinator; a planner decides what to build, a CTO decides how, executors build it in worktrees, reviewers judge it before the slow tests, the coordinator merges it (an integrator steps in on a conflict or a red), and a librarian keeps the docs short. Each runs in its own session, on the model that fits its job.
 
-- [How it works](#how-it-works): the diagrams, from [who starts whom](#1-who-starts-whom) to [the machinery around the agents](#6-the-machinery-around-the-agents) (CI, deploy, pacer, plugins and what each saves)
+- [How it works](#how-it-works): the diagrams, from [who starts whom](#1-who-starts-whom) to [the machinery around the agents](#6-the-machinery-around-the-agents) (CI, deploy, pacer, plugins and what each saves) and [the vault](#7-the-vault-what-happened-as-a-database-for-no-model-tokens) (the logs as a free database)
 - [The roles](#the-roles) · [Commands](#commands) · [Keeping tokens low](#keeping-tokens-low)
 - [What `/vibecode` does](#what-vibecode-does) · [Install](#install) · [Usage](#usage) · [Template flags](#template-flags) · [Layout](#layout)
 
@@ -138,8 +138,30 @@ flowchart TB
 | coord-beat, review-pack | `tools/work/` | 32, 26 |
 | merge cause (`cause.py`, `merge-log.py --from`), cache-ttl, tokens-since, union | `tools/work/` | 46, 51 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
-| vaultify and its git hook | `tools/vault/` | 28 |
+| vaultify (docs and logs as notes, table views) and its git hook; the gate's history log | `tools/vault/`, `tools/ci/gate.py` | 28, 54, 71 |
 | rtk, compaction config | `AGENTS.md`; the compaction snippet from `deploy.py --global` | 10, 17, 36 |
+
+### 7. The vault: what happened, as a database, for no model tokens
+
+The sessions already append to files: the merge log, decisions, the coordinator's ledger, the gate's history. A script turns those and the docs into an **Obsidian vault**: one note per batch, merge, decision, question and **log line**, each line's `key=value` fields as properties, and table views (Bases) that filter, group and sort them: reds by test and machine, merges by day, every spawn of a lane. **On by default.**
+
+```mermaid
+flowchart LR
+  A["append-only files<br/>MERGES, DECISIONS, the ledger,<br/>.work/log/gate.md, docs/log/"] --> V["vaultify.py: 0 LLM<br/>on each merge (git hook),<br/>every ~10 min (shell automation)"]
+  D["docs/ at main"] --> V
+  V --> O["Obsidian vault in .work/vault<br/>a note per event, Bases tables"]
+  O -. "your edits survive: merged 3-way" .-> V
+```
+
+| | |
+|---|---|
+| **Cost** | building: 0 model tokens (~1 s for ~750 events, measured once). Writing: only the lines agents already append, ~100 output tokens each (EST). No agent reads the vault |
+| **Open** | `<main checkout>/.work/vault` as a vault in Obsidian 1.9+; Dataview reads the same properties |
+| **Your edits** | kept: the next build merges into them; a clash is parked, never overwritten |
+| **Not a code project?** | research, writing, ops: the coordinator proposes a log shape for your events (`SOURCE`, `CLAIM`, `DEPLOY`, `INCIDENT`...) |
+| **Off** | `deploy.py <target> <answers> --no-vault` |
+
+What's logged, who writes it, the cost model, the line format and the ideas not built yet: **[skills/vibecode/vault.md](skills/vibecode/vault.md)**.
 
 ## The roles
 
@@ -178,7 +200,7 @@ Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](O
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/`. Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the planner prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the planner session plans the product.
@@ -219,12 +241,14 @@ The interview answers decide which template sets are deployed:
 | **Reviewers** | `all` · `risky` · `none` | a fresh reviewer session per batch, only for risky batches, or none |
 | **Tests** | `unit` · `e2e` · `perf` | e2e adds a shared stack and lock scripts; perf adds a performance gate on one reference machine |
 | **Remote** | on · off | a second machine over SSH for test runs and builder lanes |
+| **Vault** | on (default) · off | on: `tools/vault/` and its git hook ([section 7](#7-the-vault-what-happened-as-a-database-for-no-model-tokens)); off: `deploy.py ... --no-vault` or `"VAULT": false` in the answers |
 
 ## Layout
 
 ```
 skills/vibecode/SKILL.md          the skill
 skills/vibecode/scripts/deploy.py copies and fills the templates
+skills/vibecode/vault.md          the vault: append-only logs as a zero-LLM database
 skills/vibecode/templates/        always/ team/ solo/ reviewers/ e2e/ remote/ (opencode-global/: opt-in, deploy.py --global)
 commands/vibecode.md              the /vibecode command
 ```
