@@ -194,6 +194,19 @@ class PwshParse(unittest.TestCase):
             with self.subTest(message):
                 self.assertEqual(self.keys(cmd, pwsh_error("", message)), {"trap:pwsh-parse"})
 
+    def test_a_quote_that_broke_early_leaves_positional_args(self):
+        cases = {  # the rest of the line after the broken quote binds as arguments
+            'Select-String -Pattern "def (known|match)|\\[.at.\\]" x.py':
+                "Select-String: A positional parameter cannot be found that accepts argument 'known'.\n",
+            "Set-Content x.md -Value 'links\\: chain' 'y'":
+                "Set-Content : A positional parameter cannot be found that accepts argument 'y'.\nAt line:1 char:1\n"
+                "    + CategoryInfo          : InvalidArgument: (:) [Set-Content], ParameterBindingException\n",
+        }
+        for cmd, out in cases.items():
+            with self.subTest(cmd):
+                self.assertEqual(self.keys(cmd, out), {"trap:pwsh-parse"})
+        self.assertIn("single-quoted variable", self.f.TRAPS[[t[0] for t in self.f.TRAPS].index("pwsh-parse")][3])
+
     def test_a_script_file_that_does_not_parse_is_the_trap(self):
         out = pwsh_error("D:\\w\\look2.ps1:15", "Unexpected token 'b' in expression or statement.", 15)
         self.assertEqual(self.keys("pwsh -NoProfile -File D:\\w\\look2.ps1", out), {"trap:pwsh-parse"})

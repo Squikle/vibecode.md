@@ -45,9 +45,11 @@ TRAPS = [
     ("pwsh-parse", r"Unexpected token|An empty pipe element is not allowed|Missing closing '\)'|"
      r"Expressions are only allowed as the first element of a pipeline|Variable reference is not valid|"
      r"Missing property name after reference operator|An expression was expected after|"
-     r"Array index expression is missing|^ParserError: \S+\.ps1:\d+", None,
+     r"Array index expression is missing|^ParserError: \S+\.ps1:\d+|"
+     r"A positional parameter cannot be found that accepts argument", None,  # a quote broke early: the rest binds
      "more than ~3 statements or nested quotes: write a script file and run it; `\"${x}:\"`, not `\"$x:\"`; "
-     "`\\\"` is no escape in pwsh: single-quote a pattern holding `\"`"),
+     "`\\\"` is no escape in pwsh: single-quote a pattern holding `\"`; a pattern holding `|`, `\\` or quotes: "
+     "put it in a single-quoted variable first"),
     ("pwsh-alias-shadow", r"Invoke-History|shadow\w* by (an |the |a built-in )?alias|alias \S+ shadow", None,
      "a pwsh function named like a built-in alias never runs (`R` is Invoke-History): `Get-Alias <name>` first, "
      "or a verb-noun name"),
