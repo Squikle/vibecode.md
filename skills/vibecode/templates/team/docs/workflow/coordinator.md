@@ -4,7 +4,6 @@ You are the owner's entry point. They talk to you; you route what they say to th
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/coordinator.md`.
 **For the job:** `.work/coordinator-now.md` first when it exists (it wins: `coordinator-more.md#5`); your log's last ~40 lines (else by search) and one-line git; nothing else unless a step says so; `docs/workflow/coordinator-more.md#<n>` by `find.py --section` where a pointer says.
-**Cheap reads:** never a shell's saved output whole (tail or grep it); no polling; `map.py --find <name>`, then a ranged read.
 
 ## Limits
 
@@ -23,7 +22,7 @@ You are the owner's entry point. They talk to you; you route what they say to th
 
 - The CTO and the librarian take no executor slot; one of each at a time.
 - **The priciest model** (`{{M_PLANNER}}`, planner and CTO class) **needs the owner's OK per spawn;** unattended, a `waits on you` 📌 unless the wait blocks a lane. A short follow-up to a running session is no spawn.
-- **Ask the owner only when a wrong guess is expensive** (the question tool, one call, your pick first; 📌 lines: `coordinator-more.md#6`).
+- **Asking the owner:** `AGENTS.md` section 1; 📌 lines: `coordinator-more.md#6`.
 
 ## Start (and every resume)
 
@@ -47,8 +46,8 @@ Then merge what waits (the loop's merge step), and spawn the executors from the 
 ## The loop per batch
 
 1. **Spawn the executor** (template below). It builds and runs the cheap checks<!-- if:reviewers -->, then answers `READY FOR REVIEW <id> base=<sha> head=<sha>` and goes on with its next batch meanwhile<!-- endif --><!-- if:!reviewers --> and its gate, then answers `DONE <id> head=<sha>`<!-- endif -->.
-<!-- if:reviewers -->2. **Spawn a fresh reviewer** for {{REVIEW_STEP}} (template below; the executor's worktree path in it). **No blocker or major** (`GREEN`, `GREEN WITH NOTES`): the reviewer fixes its own minors and nits there, runs the gate and answers `READY TO MERGE <id> head=<sha>`; the executor, retired at its last READY, is not resumed.
-3. **A real blocker or major** goes back to the executor, who knows the design: resume it (warm, at most 125k) or start a fresh one with a pointer brief, and send the findings with your calls on them. Then a **fresh reviewer for the delta only**, round 2 (`review-2.md`); a rewrite or a change the owner sees always gets it. A trivial major (a one-line test fix) the first reviewer fixes itself. A reviewer's UNVERIFIED claim: the executor measures it first.
+<!-- if:reviewers -->2. **Spawn a fresh reviewer** for {{REVIEW_STEP}} (template below; the executor's worktree path in it). `GREEN`: the reviewer fixes its minors, gates and answers `READY TO MERGE` (`docs/HANDOVER.md` 5b); the executor is not resumed.
+3. **A real blocker or major** goes back to the executor, who knows the design: resume it (warm, at most 125k) or start a fresh one with a pointer brief, and send the findings with your calls on them. Then a **fresh reviewer for the delta only**, round 2 (`review-2.md`); a rewrite or a change the owner sees always gets it. A reviewer's UNVERIFIED claim: the executor measures it first.
 <!-- endif --><!-- if:reviewers -->4. **The gate and the report:** a reviewed batch's gate is the reviewer's; otherwise the executor's (`docs/workflow/lane-brief.md`), which answers `DONE <id> head=<sha>` with numbers.
 <!-- endif --><!-- if:reviewers -->5<!-- endif --><!-- if:!reviewers -->2<!-- endif -->. **You merge** `READY TO MERGE` / `DONE` batches in backlog order, in the main worktree (`coordinator-more.md#2`); a chain merges as one with all its ids. An integrator only on `CONFLICTS LEFT`, `NEW-RED`, `SHIP .. FAIL` or `ERROR` twice.
 <!-- if:reviewers -->6<!-- endif --><!-- if:!reviewers -->3<!-- endif -->. **Tell the owner** after each merge: what to try, in a few lines.
@@ -83,7 +82,7 @@ Propose one (one question) when ~10 feature batches merged since the last, the C
 
 **Executor:**
 ```text
-You are executor <E#> of {{PROJECT}}. Read AGENTS.md and docs/workflow/lane-brief.md (your rules). Worktree <path>, branch <id> cut from <base>. Queue: 1. <id> (spec docs/specs/<id>.md) 2. <id> ... Resume from git status and .work/<id>/progress.md (keep a NOW: line in it). At most 5 lines per batch.
+You are executor <E#> of {{PROJECT}}. Read AGENTS.md and docs/workflow/lane-brief.md (your rules). Worktree <path>, branch <id> cut from <base>. Queue: 1. <id> (spec docs/specs/<id>.md) 2. <id> ... Resume from git status and .work/<id>/progress.md (keep a NOW: line in it). At most 8 lines per batch.
 ```
 <!-- if:reviewers -->**Reviewer** (fresh each time):
 ```text
@@ -110,12 +109,12 @@ Warm = last turn under ~50 minutes ago (the cache lives ~1 hour). A cached read 
 Over a limit: no new job; act at its next idle point, never mid-run (a merge or a gate in hand).
 
 - **An integrator only where your merge stops, a fresh one per ~4 merges** (it retires at ~150k): you keep `.work/integrator-queue.md` live and small (the integrator brief says how); the next integrator needs only its brief, that file and the batch's report. A conflict it hands back is yours: settle it from both sides' reports; a design clash goes to the CTO.
-- **No spawn for a small task:** queue it for its role's next or running session, or `grep` it yourself. Spawn only for a batch, a review, an integration or a queue of jobs. Small doc and data fixes you do yourself (cost rules: `coordinator-more.md#7`).
+- **Spawn only for a batch, a review, an integration or a queue of jobs** (`AGENTS.md` section 2). Small doc and data fixes you do yourself (cost rules: `coordinator-more.md#7`).
 - **A planner that starts pre-groomers runs as its own session** (`/planner`; a `general` subagent cannot start subagents). Each role has its own command.
 
 ## Machines and the heartbeat
 
-- **One browser suite per machine at a time:** each machine has its own lock (`tools/work/lock.ps1` / `lock.sh`); held means busy: wait or use a free machine. Draw on the GPU where a machine has one (`docs/MACHINES.md`).
+- **A held machine lock means busy:** wait or use a free machine. Draw on the GPU where a machine has one (`docs/MACHINES.md`).
 - **Keep every machine busy.** An idle machine with ready work gets a lane. Check every machine on every turn with one command (its lock, its load, its lanes<!-- if:remote -->, B's `status.md`<!-- endif -->).
 - **Heartbeat, every ~10 minutes while sessions run:** `tools/work/coord-beat.py` and the `NOW:` lines (`coordinator-more.md#3`); one silent 10 minutes with no test running gets a one-line nudge (a hung shell is killed); then any lane whose row is ready. **Session care** (merges first, keep-alive, retiring, ledgers) and the **merge paths:** `coordinator-more.md#1`, `#2`; the pacer's lane cap `#8`; gate fine print `#9`.
 

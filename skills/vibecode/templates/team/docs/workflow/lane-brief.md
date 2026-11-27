@@ -10,16 +10,13 @@ All from your own worktree (this brief too, never the main checkout's copy). The
 - A spec's `## How to build` (the CTO's) is followed; a deviation is one line in the report; a design question it does not answer goes to the coordinator for the CTO.
 
 ## Cheap reads
-- **Never read a shell's saved output whole** (a truncated output's file): tail it, grep `FAIL|ERROR`, or rerun the command filtered.
-- **No polling:** a background run notifies you when it ends; wait for that. No `Wait-Process`/`Start-Sleep` loops, no re-checking.
-- **Look up, don't re-read:** `python tools/work/map.py --find <name>`, `map.py <file>` (an outline with line numbers), then a ranged read; `git grep -n -E "a|b"` for uses. Each brief and big doc once, in one call. More: `lane-more.md#1`.
+- `AGENTS.md` sections 3 and 5 hold the lookup, saved-output and no-polling rules. Plus: each brief and big doc once, in one call; `git grep -n -E "a|b"` for uses. More: `lane-more.md#1`.
 
 ## Hard rules
 - Each later batch of your queue: `git checkout -b <next-id>` **from the branch you just finished**, unless the coordinator names another base. Never check out, merge into or push `main`; never `git pull`/`push`; never change git config. `git fetch` is fine.
 - Shared dependency folders are links to the main tree's: **never install into them**, never delete under them, never `--force` on a worktree. A new dependency: build the rest, skip that part, say so. More: `lane-more.md#2`.
 - **Never start or redeploy the owner's live app;** a trial stack runs under its own project name and comes down in the same command. **Never leave a `.env` in your checkout.**
 - **Never use a Playwright MCP or any headed browser for checks:** it pops a window onto the owner's screen. Browser tests only via the repo's own e2e; OpenCode checks via its HTTP API. No subagents of your own.
-- **Long runs in the foreground** with a long `timeout`, output into a log; read only the summary and the failures.
 <!-- if:e2e -->- **An e2e or stack command you run by hand runs under the lock:** `pwsh -File tools/work/lock.ps1 -Name e2e -Who <id> -Cmd "<stack up from this tree>; <runner> <named files>"`. Always name the files.
 <!-- endif --><!-- if:remote -->- **e2e on machine B by default** (`tools/work/remote-run.ps1`, your committed HEAD): `lane-more.md#2`.
 <!-- endif -->

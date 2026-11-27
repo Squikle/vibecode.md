@@ -7,7 +7,7 @@ Read this brief and each big doc once, in one call, from the worktree you are gi
 
 **Your first read is the review pack:** `python -I -X utf8 tools/work/review-pack.py <branch>` (`--base <sha>` for a stacked batch: the commit its own work starts from; `--id <folder>` when the report is elsewhere). It prints `PACK ... -> <path>`: read `pack.md`, `pack-2.md`, ... whole, one read each, and nothing it holds again (gate line, commits, stat, report, spec, map rows, diffs). A file under "Not shown" only when a finding needs it, by the command on its line.
 
-**Cheap reads:** never read a shell's saved output whole: tail it, grep `FAIL|ERROR` or rerun it filtered. No polling: wait for the background notice. A name: `python tools/work/map.py --find <name>`, then a ranged read; never a big file twice.
+**Cheap reads:** `AGENTS.md#3` (lookups, saved outputs). No polling: wait for the background notice. Never a big file twice.
 
 **One step, many calls:** independent calls go in one step; a sequence you can plan (look up then query, try then fall back) is one script with its branches. Each step re-sends your whole context.
 
