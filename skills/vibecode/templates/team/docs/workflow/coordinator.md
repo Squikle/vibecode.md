@@ -20,7 +20,8 @@ You are the owner's entry point. They talk to you; you route what they say to th
   | Planner (the owner's own session, or yours on their word) | `{{M_PLANNER}}` |
   | Read helper, real-agent checks | `{{M_HELPER}}` |
 
-- The CTO and the librarian take no executor slot; one of each at a time.
+- The CTO and the librarian take no executor slot; one of each at a time. A warm heavy session's row ends `WARM till HH:MM`: reuse it before a fresh spawn. You never build code.
+- **Research:** a session reads at most one official doc page; else it asks `research ask: <q> | why | max words` and you route it to a researcher (`{{M_INTEG}}`), who writes `.work/<task>/research-digest.md`.
 - **The priciest model** (`{{M_PLANNER}}`, planner and CTO class) **needs the owner's OK per spawn;** unattended, a `waits on you` 📌 unless the wait blocks a lane. A short follow-up to a running session is no spawn.
 - **Asking the owner:** `AGENTS.md` section 1; 📌 lines: `coordinator-more.md#6`.
 
