@@ -1,9 +1,12 @@
 """Deploy the vibecode templates into a project folder.
 
-Usage: python -I -X utf8 deploy.py <target> <answers.json>
+Usage: python -I -X utf8 deploy.py <target> <answers.json> [--no-vault]
 
 - Copies templates/<group>/** into <target> for each group whose flag is on:
   always, team (team or fleet), solo, reviewers (all or risky), e2e (e2e or perf), remote.
+- The docs vault (tools/vault/) is on: in a repository whose top is <target> it installs its git hooks
+  (tools/vault/hook.py install); else it prints the command for after `git init`. `--no-vault` or `"VAULT": false`
+  in the answers leaves tools/vault/ out (the gate and integrate skip it).
 - Fills {{KEY}} from the answers (missing keys stay visible as {{KEY}}).
 - Keeps <!-- if:flag --> ... <!-- endif --> blocks only when the flag is on; `if:!flag` negates; blocks may nest.
 - Never overwrites a file; templates named `gitignore` / `gitattributes` are appended to the dotfiles line by line.
@@ -68,11 +71,13 @@ def install_global(args: list) -> int:
 
 if sys.argv[1:2] == ["--global"]:
     sys.exit(install_global(sys.argv[2:]))
-if len(sys.argv) != 3 or sys.argv[1].startswith("-"):
-    print("usage: deploy.py <target> <answers.json> | deploy.py --global [--force]", file=sys.stderr)
+args = [x for x in sys.argv[1:] if x != "--no-vault"]
+if len(args) != 2 or args[0].startswith("-"):
+    print("usage: deploy.py <target> <answers.json> [--no-vault] | deploy.py --global [--force]", file=sys.stderr)
     sys.exit(2)
-target = pathlib.Path(sys.argv[1]).resolve()
-a = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+target = pathlib.Path(args[0]).resolve()
+a = json.loads(pathlib.Path(args[1]).read_text(encoding="utf-8"))
+vault = "--no-vault" not in sys.argv and a.get("VAULT", True) is not False  # the docs vault: on unless opted out
 
 scale, rev, tests = a.get("SCALE", "team"), a.get("REVIEWERS", "all"), a.get("TESTS", "e2e")
 flags = {
@@ -89,6 +94,7 @@ flags = {
     "cap": a.get("USAGE") == "cap",
     "local": a.get("USAGE") == "local",
     "windows": a.get("LOCAL_OS") == "windows",
+    "vault": vault,
 }
 # Older answer files lack the newer roles: fall back to the reviewer's (top, high) or the integrator's model.
 for k, fallback in (("M_CTO", "M_REVIEW"), ("M_PREGROOM", "M_REVIEW"), ("M_DOCS", "M_INTEG")):
@@ -120,6 +126,8 @@ for group in ["always", "team", "solo", "reviewers", "e2e", "remote"]:
         continue
     for src in sorted(p for p in root.rglob("*") if p.is_file() and "__pycache__" not in p.parts):  # a local test run leaves .pyc
         rel = src.relative_to(root)
+        if not vault and rel.parts[:2] == ("tools", "vault"):  # the gate and integrate skip a missing tools/vault/
+            continue
         text = fill(src.read_text(encoding="utf-8"))
         if rel.name in ("gitignore", "gitattributes"):
             dst = target / rel.parent / ("." + rel.name)
@@ -153,6 +161,25 @@ if skipped:
 left = sorted({m for c in created if not c.endswith(")") for m in re.findall(r"\{\{([A-Z_0-9]+)\}\}", (target / c).read_text(encoding="utf-8"))})
 if left:
     print("UNFILLED placeholders:", ", ".join(left))
+
+
+def vault_hook() -> str:
+    """The vault's git hooks (`tools/vault/hook.py install`): only in a repository whose top is the target."""
+    import subprocess
+    hook = target / "tools" / "vault" / "hook.py"
+    if not vault:
+        return "off (--no-vault or \"VAULT\": false): no tools/vault/, no hooks"
+    if not hook.is_file():
+        return "no tools/vault/hook.py: skipped"
+    top = subprocess.run(["git", "-C", str(target), "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+    if top.returncode or os.path.normcase(str(pathlib.Path(top.stdout.strip()).resolve())) != os.path.normcase(str(target)):
+        return "not a git repository's top yet: after `git init`, run `python -I tools/vault/hook.py install`"
+    r = subprocess.run([sys.executable, "-I", str(hook), "install", "--repo", str(target)], capture_output=True, text=True)
+    last = (r.stdout.strip().splitlines() or [r.stderr.strip() or f"exit {r.returncode}"])[-1]
+    return last + ("" if r.returncode == 0 else " (see `python -I tools/vault/hook.py print`)")
+
+
+print("vault hook: " + vault_hook() + ("; how it works: tools/vault/README.md" if vault else ""))
 prompts = (target / "docs/PROMPTS.md")
 if prompts.exists():
     t = prompts.read_text(encoding="utf-8")

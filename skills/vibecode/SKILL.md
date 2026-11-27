@@ -81,7 +81,7 @@ Write the IDs as `provider/model#variant` (opencode's format for agents, command
     "NOTES": "<executor count reasoning, missing tools>"}
    ```
 2. Run `python -I -X utf8 <skill base>/scripts/deploy.py <target> <target>/.work/vibecode-answers.json`. It prints the created and skipped files, then the prompts.
-3. If the folder is not a git repository: `git init`, then commit everything with the message `Set up the vibecode workflow.` Never add a remote and never push: that's their call.
+3. If the folder is not a git repository: `git init`, then commit everything with the message `Set up the vibecode workflow.` Never add a remote and never push: that's their call. Then `python -I tools/vault/hook.py install` in it (the docs vault's hooks; `deploy.py` did it already in a repository, and leaves the vault out with `--no-vault` or `"VAULT": false`: only when they say they never want it). What the vault is: `vault.md`.
 
 ## 7. Answer them
 
