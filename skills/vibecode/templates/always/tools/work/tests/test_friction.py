@@ -1,5 +1,7 @@
 """friction.py over a tiny opencode database built here: `python -I -X utf8 -m unittest discover -s tools/work/tests`."""
+import importlib.util
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -150,6 +152,61 @@ class Friction(unittest.TestCase):
         rc, out = self.run_tool("--fixed", "no-such-trap=2026-11-26", rc_ok=False)
         self.assertNotEqual(rc, 0)
         self.assertIn("unknown trap", out)
+
+    def test_a_directory_source_is_refused_without_an_export(self):
+        empty = self.dir / "no-tools"
+        empty.mkdir()
+        env = {**os.environ, "PATH": str(empty)}  # `opencode session export .` would die with a traceback here
+        for src in (".", str(self.dir)):
+            done = subprocess.run([sys.executable, "-I", "-X", "utf8", str(TOOL), src], capture_output=True,
+                                  text=True, encoding="utf-8", env=env, cwd=self.dir)
+            self.assertNotEqual(done.returncode, 0)
+            self.assertIn(f"friction: {src}: a directory; sources are session ids or export .json files; "
+                          "omit for the database", done.stderr)
+            self.assertNotIn("Traceback", done.stderr)
+
+
+def pwsh_error(source, message, line=1):
+    """pwsh 7's parse error as a shell prints it: a header, the line, its `~` mark, the message."""
+    return (f"ParserError: {source}\nLine |\n{line:>4} |  x\n     |    ~\n     | {message}\n")
+
+
+class PwshParse(unittest.TestCase):
+    """Each pwsh parse error joins the `pwsh-parse` trap, whatever its wording."""
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("friction", TOOL)
+        cls.f = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.f)
+
+    def keys(self, cmd, out, code=1):
+        scan = self.f.Scan()
+        scan.part("s", shell(cmd, out, code))
+        return set(scan.clusters)
+
+    def test_each_new_message_is_the_trap(self):
+        cases = {  # `\"` is no escape in pwsh: each of these broke on one
+            "Missing property name after reference operator.": 'git grep -n -e "from \\"./a\\"" -- src/a.ts',
+            "Array index expression is missing or not valid.": 'git grep -n -E "test\\(\\"[^\\"]*" -- src',
+            "An expression was expected after '('.": "git grep -n -e \"goto(\\'/#\" -- e2e",
+        }
+        for message, cmd in cases.items():
+            with self.subTest(message):
+                self.assertEqual(self.keys(cmd, pwsh_error("", message)), {"trap:pwsh-parse"})
+
+    def test_a_script_file_that_does_not_parse_is_the_trap(self):
+        out = pwsh_error("D:\\w\\look2.ps1:15", "Unexpected token 'b' in expression or statement.", 15)
+        self.assertEqual(self.keys("pwsh -NoProfile -File D:\\w\\look2.ps1", out), {"trap:pwsh-parse"})
+
+    def test_windows_powershell_prints_the_message_bare(self):
+        out = ("At line:1 char:21\n+ git grep -n -e \"from \\\"./a\\\"\" -- a.ts\n+                     ~\n"
+               "Missing property name after reference operator.\n"
+               "    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException\n")
+        self.assertEqual(self.keys('git grep -n -e "from \\"./a\\"" -- a.ts', out), {"trap:pwsh-parse"})
+
+    def test_a_python_parser_error_is_not_the_trap(self):
+        out = "dateutil.parser._parser.ParserError: Unknown string format: x.ps1:3"
+        self.assertNotIn("trap:pwsh-parse", self.keys("python tools/when.py", out))
 
 
 if __name__ == "__main__":

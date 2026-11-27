@@ -7,7 +7,8 @@ Usage: python -I -X utf8 tools/work/friction.py [--db <opencode.db>] [--since 48
   With no session named it reads the opencode database read-only (`--db`, default `$XDG_DATA_HOME/opencode/
   opencode.db`, else `~/.local/share/opencode/opencode.db`: the same place on Windows, macOS and Linux): the
   sessions updated in `--since` (`90m`, `48h`, `7d`), subagents only (`--all`: every session). A named session id
-  is read with `opencode session export <id>`, a path ending in .json as such an export; each is read whole.
+  is read with `opencode session export <id>`, a path ending in .json as such an export; each is read whole. A
+  directory (a stray `.`) is refused before anything runs.
 
 What counts is the command's own failure, never the text it printed: a tool call that ended in error; in shell
 output a shell's own complaint (a PowerShell parse or cmdlet error and its `| <message>` lines, git's `fatal:`, a
@@ -42,8 +43,11 @@ TRAPS = [
     ("pwsh-substring", r"Substring|startIndex|Index and length must refer", None,
      "never `.Substring(0,N)` to trim (throws on a short line): `$s[0..199] -join ''` or `-replace '^(.{200}).*','$1'`"),
     ("pwsh-parse", r"Unexpected token|An empty pipe element is not allowed|Missing closing '\)'|"
-     r"Expressions are only allowed as the first element of a pipeline|Variable reference is not valid", None,
-     "more than ~3 statements or nested quotes: write a script file and run it; `\"${x}:\"`, not `\"$x:\"`"),
+     r"Expressions are only allowed as the first element of a pipeline|Variable reference is not valid|"
+     r"Missing property name after reference operator|An expression was expected after|"
+     r"Array index expression is missing|^ParserError: \S+\.ps1:\d+", None,
+     "more than ~3 statements or nested quotes: write a script file and run it; `\"${x}:\"`, not `\"$x:\"`; "
+     "`\\\"` is no escape in pwsh: single-quote a pattern holding `\"`"),
     ("pwsh-alias-shadow", r"Invoke-History|shadow\w* by (an |the |a built-in )?alias|alias \S+ shadow", None,
      "a pwsh function named like a built-in alias never runs (`R` is Invoke-History): `Get-Alias <name>` first, "
      "or a verb-noun name"),
@@ -91,7 +95,8 @@ OWN = re.compile(r"is not recognized as|command not found|No module named|'charm
                  rf"^\s*({VERBS})-[A-Z]\w+: \S|^\s*(InvalidOperation|ParserError|MethodInvocationException|"
                  r"RuntimeException|ParameterBindingException|CommandNotFoundException|InvalidArgument|"
                  r"ObjectNotFound|PermissionDenied|ResourceUnavailable|NotSpecified): \S|Unexpected token|"
-                 r"An empty pipe element|Missing closing|Expressions are only allowed|Variable reference is not valid")
+                 r"An empty pipe element|Missing closing|Expressions are only allowed|Variable reference is not valid|"
+                 r"Missing property name after|An expression was expected after|Array index expression is missing")
 TEST_LINE = re.compile(r"\bFAILED\b|\bFAIL\b|AssertionError|\bassert\b|\d+ failed|expect\(|Test timeout|"
                        r"Timeout \d+ms exceeded|locator\.\w+:|page\.\w+:|toBe|toHave|toEqual|✘|×", re.I)
 SELF = re.compile(r"(?im)^[\s>*_`-]*friction:\s*(.+?)\s*[`*_]*\s*[x×]\s*(\d+)\s*[`*_.]*\s*$")
@@ -348,6 +353,10 @@ def main(argv=None):
         changed |= fixed.get(name) != date.strip()
         fixed[name] = date.strip()
     scan = Scan()
+    for src in a.sources:  # a stray `.` after the command line is no session id: never `opencode session export .`
+        if pathlib.Path(src).is_dir():
+            raise SystemExit(f"friction: {src}: a directory; sources are session ids or export .json files; "
+                             "omit for the database")
     if a.sources:
         for src in a.sources:
             read_export(scan, src)
