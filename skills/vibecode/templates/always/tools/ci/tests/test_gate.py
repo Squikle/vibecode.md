@@ -1,5 +1,7 @@
 """gate.py's locks and CPU admission, with no git and no real CPU: `python -I -X utf8 -m unittest discover -s tools/ci/tests`."""
+import contextlib
 import importlib.util
+import io
 import os
 import tempfile
 import time
@@ -182,6 +184,29 @@ class Locks(Base):
         self.assertIn("since eeeeeeee (origin/main)", gate.describe(full).splitlines()[0])
         self.assertEqual(full["parts"][0]["try_locks"], ["e2e", "e2e2"])
         self.assertEqual(pinned["parts"][0]["try_locks"], ["e2e2"])
+
+
+class History(Base):
+    RUN = {"sha": "c389b513" * 5, "verdict": "NEW-RED", "mode": "full", "seconds": 241, "new_flaky": [],
+           "parts": [{"name": "e2e", "machine": "mac", "passed": 40, "failed": 1,
+                      "new": [{"id": "a::opens", "name": "opens the menu", "file": "e2e/a.spec.ts"}]}]}
+
+    def test_each_run_appends_its_lines_under_one_header(self):
+        gate.history(self.config, self.RUN)
+        gate.history(self.config, self.RUN)
+        text = (self.main / ".work" / "log" / "gate.md").read_text(encoding="utf-8")
+        self.assertEqual(text.count("# Gate runs"), 1)
+        self.assertEqual(text.count(" GATE verdict=NEW-RED sha=c389b513 mode=full seconds=241 new=1 flaky=0"), 2)
+        self.assertEqual(text.count(' RED test="opens the menu" part=e2e machine=mac sha=c389b513 file="e2e/a.spec.ts"'), 2)
+
+    def test_a_write_that_fails_never_fails_the_gate(self):
+        (self.main / ".work").mkdir()
+        (self.main / ".work" / "log").write_text("a file where the folder goes", encoding="utf-8")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            gate.history(self.config, self.RUN)
+            gate.history({}, self.RUN)
+        self.assertEqual(err.getvalue().count("gate history not written"), 2)
 
 
 if __name__ == "__main__":

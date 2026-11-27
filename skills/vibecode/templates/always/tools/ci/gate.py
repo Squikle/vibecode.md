@@ -913,7 +913,41 @@ def do_run(config: dict, plan: dict, keep: bool) -> dict:
     data = json.dumps(result, indent=1)
     (out_dir(config) / f"{name}.json").write_text(data, encoding="utf-8")
     (logs / "result.json").write_text(data, encoding="utf-8")
+    history(config, result)
     return result
+
+
+HISTORY = ("# Gate runs\n\nAppended by `tools/ci/gate.py`: one line per run, one per new red and new flaky test. Never "
+           "read by an agent; the vault turns each line into a note (`tools/vault/README.md`, Logs).\n\n")
+
+
+def history_lines(r: dict, stamp: str) -> list[str]:
+    """The gate's history in the vault's log shape: `- date time TYPE key=value ...`."""
+    q = lambda s: " ".join(str(s).replace('"', "'").split())[:160]
+    parts = ", ".join(f"{p['name']} {p.get('passed', 0)}/{p.get('failed', 0)}" for p in r["parts"])
+    new = sum(len(p.get("new", [])) for p in r["parts"])
+    lines = [f'- {stamp} GATE verdict={r["verdict"]} sha={r["sha"][:8]} mode={r["mode"]} seconds={r["seconds"]} '
+             f'new={new} flaky={len(r.get("new_flaky", []))} parts="{q(parts)}"']
+    for p in r["parts"]:
+        flaky = set(p.get("new_flaky", []))
+        for kind, items in (("RED", p.get("new", [])), ("FLAKY", [i for i in p.get("reds", []) if i.get("id") in flaky])):
+            for item in items:
+                lines.append(f'- {stamp} {kind} test="{q(item.get("name") or item.get("id", "?"))}" part={p["name"]} '
+                             f'machine={p.get("machine", "?")} sha={r["sha"][:8]}'
+                             + (f' file="{q(item["file"])}"' if item.get("file") else ""))
+    return lines
+
+
+def history(config: dict, r: dict) -> None:
+    """Append the run to `<main>/.work/log/gate.md` (red history by test and machine, gate times). Never fails the gate."""
+    try:
+        path = Path(config["main"]) / ".work" / "log" / "gate.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        text = "\n".join(history_lines(r, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"))) + "\n"
+        with path.open("a", encoding="utf-8", newline="\n") as f:
+            f.write((HISTORY if f.tell() == 0 else "") + text)
+    except (OSError, KeyError, TypeError) as e:
+        say(f"gate history not written: {e}")
 
 
 # ---------------------------------------------------------------- ship

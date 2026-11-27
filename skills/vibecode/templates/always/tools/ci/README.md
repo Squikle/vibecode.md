@@ -122,7 +122,10 @@ the test has been green for two full gates.
    ```
    Build once: `docker compose -f docker-compose.ci.yml --profile ci build ci`. Mark the parts `"docker": true`.
 3. A part that needs the host (a GPU, a real browser window, a perf suite on the reference machine) stays a host part.
-4. Optional, once per clone: `python -I tools/vault/hook.py install` (the vault rebuilds when `main` moves; `tools/vault/README.md`).
+4. The vault's hook (`deploy.py` installs it in a git repository; else once per clone): `python -I tools/vault/hook.py install`
+   (the vault rebuilds when `main` moves; `tools/vault/README.md`). Each gate run also appends `.work/log/gate.md` (a
+   `GATE` line per run, a `RED` / `FLAKY` line per new red or flaky test with its part and machine), which the vault
+   turns into notes and the `Logs.base` views "Reds by test" and "Flaky by test". A failed write never fails the gate.
 
 **macOS:** run it as `python3 tools/ci/gate.py ...`. Over ssh, Docker Desktop's keychain can block `docker`: set
 `DOCKER_CONFIG` to a config without `credsStore` for those runs. Locks there are folders (`.work/<name>.lock.d`).
