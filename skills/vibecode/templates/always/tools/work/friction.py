@@ -9,17 +9,22 @@ Usage: python -I -X utf8 tools/work/friction.py [--db <opencode.db>] [--since 48
   sessions updated in `--since` (`90m`, `48h`, `7d`), subagents only (`--all`: every session). A named session id
   is read with `opencode session export <id>`, a path ending in .json as such an export; each is read whole.
 
-What counts: a tool call that ended in error, and in shell output a line that looks like an error (`fatal:`,
-`...Error:`, `is not recognized`, `No such file`, PowerShell's `| <message>`). Each line is normalized (paths,
-shas, numbers and quoted text that is not one word become `<path>`, `<sha>`, `N`, `<q>`) and clustered; a cluster
-holds its sessions, hits, one command and one line. TRAPS names the known ones and their fix in one line; the rest
-are UNKNOWN, ranked by sessions: the point of the report, a new trap shows before anyone writes its regex. A
-product test failing (FAILED, AssertionError, `N failed`, or any non-environment error inside a test run) is work,
-not friction: tagged `test`, never promoted. A lane's own `friction: <error> xN` line (AGENTS.md section 5) adds N
-hits to its cluster.
+What counts is the command's own failure, never the text it printed: a tool call that ended in error; in shell
+output a shell's own complaint (a PowerShell parse or cmdlet error and its `| <message>` lines, git's `fatal:`, a
+missing tool, a locked or denied file); and, from a command that exited non-zero and does not read or test, a line
+shaped like an error (`...Error: `, `error: `, `N failed`). A command that reads a file or log (`Get-Content`,
+`Select-String`, `cat`, `git show`, a `.log`) or runs tests (`pytest`, `playwright`, `gate.py`) prints other
+programs' errors: only its own count. Each line is normalized (paths, shas, numbers and quoted text that is not one
+word become `<path>`, `<sha>`, `N`, `<q>`) and clustered; a cluster holds its sessions, hits, one command and one
+line. TRAPS names the known ones and their fix in one line; the rest are UNKNOWN, ranked by sessions: the point of
+the report, a new trap shows before anyone writes its regex. A product test failing (FAILED, AssertionError) is
+work, not friction: tagged `test`, never promoted. A lane's own `friction: <error> xN` line (AGENTS.md section 5)
+adds N hits to its cluster.
 
 A cluster seen in `--promote` sessions or more is PROMOTE: fix it at source. `--state <file>` remembers the
-promoted ones (JSON); one alerts once, as NEW. Exit 1 when a NEW promote is in the report (no `--state`: any
+promoted ones (JSON); one alerts once, as NEW. `--fixed <trap>=<date>` (kept in `--state`) marks a trap fixed at
+source: it shows `fixed <date>` with its hits and sessions since, and never promotes again (a hit since is a shell
+opened before the fix, or a fix that did not take). Exit 1 when a NEW promote is in the report (no `--state`: any
 promote), else 0, so an automation can alert. It prints a short markdown report to stdout and writes nothing but
 `--state`. Check a cluster against its sessions before fixing it: a count alone can be a false alarm.
 """
@@ -29,16 +34,26 @@ import argparse, collections, json, os, pathlib, re, shutil, sqlite3, subprocess
 TRAPS = [
     ("rg-missing", r"\brg\b.*(not recognized|not found)|rg: (command )?not found", None,
      "install ripgrep, then open a fresh shell (an old one keeps the old PATH); else `git grep`"),
-    ("git-grep-option-after-pattern", r"unable to resolve revision|must come before non-option arguments",
-     r"\bgit\b[^|;\n]*\bgrep\b", "git grep options go before the pattern: `git grep -n -A 8 -e <pat> -- <path>`"),
+    ("git-grep-option-after-pattern", r"unable to resolve revision|must come before non-option arguments|"
+     r"ambiguous argument '-", r"\bgit\b[^|;\n]*\bgrep\b",
+     "git grep options go before the pattern: `git grep -n -A 8 -e <pat> -- <path>`"),
+    ("git-missing-ref", r"Needed a single revision|unknown revision|ambiguous argument|bad revision", None,
+     "check the ref first: `git branch --list <ref>` or `git rev-parse --verify --quiet <ref>`"),
     ("pwsh-substring", r"Substring|startIndex|Index and length must refer", None,
      "never `.Substring(0,N)` to trim (throws on a short line): `$s[0..199] -join ''` or `-replace '^(.{200}).*','$1'`"),
+    ("pwsh-parse", r"Unexpected token|An empty pipe element is not allowed|Missing closing '\)'|"
+     r"Expressions are only allowed as the first element of a pipeline|Variable reference is not valid", None,
+     "more than ~3 statements or nested quotes: write a script file and run it; `\"${x}:\"`, not `\"$x:\"`"),
     ("pwsh-alias-shadow", r"Invoke-History|shadow\w* by (an |the |a built-in )?alias|alias \S+ shadow", None,
      "a pwsh function named like a built-in alias never runs (`R` is Invoke-History): `Get-Alias <name>` first, "
      "or a verb-noun name"),
     ("pwsh-console-mojibake", r"mojibake|mangl\w* (non-ASCII|unicode|utf)|â€|Ã[\x80-\xbf]", None,
      "a pwsh capture (`git show`, console output) mangles non-ASCII: compare revisions byte-wise in Python, "
      "`subprocess.run([...], capture_output=True)` with bytes"),
+    ("edit-stale", r"Could not find oldString", None,
+     "re-read the exact lines just before an edit; anchor on a small unique piece of them"),
+    ("pytest-temp-race", r"(PermissionError|Access is denied|being used by another process).*pytest-(current|of-)", None,
+     "a unique `--basetemp` per run (`--basetemp .work/pytest-<id>`): parallel runs share `pytest-current`"),
     ("python-charmap", r"'charmap' codec|UnicodeEncodeError|UnicodeDecodeError", None,
      "`PYTHONUTF8=1` as a user env var; run `python -I -X utf8`; open files with `encoding=\"utf-8\"`"),
     ("python-no-venv", r"ModuleNotFoundError|No module named", None,
@@ -62,11 +77,23 @@ NOT_ERROR = re.compile(r"^\s*(\d+[:\t]|[+-](?![+-])|(?:[A-Za-z]:)?[^\s:|]+:\d+[:
                        r"catch\b|throw\b|if\b|elif\b|return\b|def\b|class\b|import\b|from\b|- |0 errors?\b|"
                        r"no errors?\b|errors?: 0\b|Traceback \(most recent)|^\s*\w+(Error|Exception):?\s*$")
 TEST_RUN = re.compile(r"pytest|vitest|jest|playwright|unittest|go test|cargo test|\b(npm|pnpm|yarn) (run )?test|"
-                      r"mocha|rspec|phpunit|ctest", re.I)
+                      r"mocha|rspec|phpunit|ctest|gate\.py", re.I)
+# A command that reads a file or a log: what it prints is someone else's text, errors included.
+READS = re.compile(r"\b(Get-Content|gc|cat|head|tail|Select-String|sls|findstr|grep|rg|jq|Import-Csv|"
+                   r"ConvertFrom-Json)\b|\bgit\s+(show|log|diff|blame|grep)\b|\.(log|out)\b", re.I)
+# The command's own failure, wherever it ran: the shell's, git's or the OS's complaint, not a program's text.
+VERBS = (r"Get|Set|Select|Where|ForEach|Remove|New|Copy|Move|Out|Write|Invoke|Start|Stop|Test|Import|Export|"
+         r"ConvertFrom|ConvertTo|Add|Join|Split|Resolve|Push|Pop|Measure|Sort|Group|Format|Read|Clear|Rename|Wait|"
+         r"Compare")
+OWN = re.compile(r"is not recognized as|command not found|No module named|'charmap' codec|Permission denied|"
+                 r"Access is denied|being used by another process|No such file or directory|Cannot find path|"
+                 r"Could not find a part of the path|Exception calling |^\s*fatal: |"
+                 rf"^\s*({VERBS})-[A-Z]\w+: \S|^\s*(InvalidOperation|ParserError|MethodInvocationException|"
+                 r"RuntimeException|ParameterBindingException|CommandNotFoundException|InvalidArgument|"
+                 r"ObjectNotFound|PermissionDenied|ResourceUnavailable|NotSpecified): \S|Unexpected token|"
+                 r"An empty pipe element|Missing closing|Expressions are only allowed|Variable reference is not valid")
 TEST_LINE = re.compile(r"\bFAILED\b|\bFAIL\b|AssertionError|\bassert\b|\d+ failed|expect\(|Test timeout|"
                        r"Timeout \d+ms exceeded|locator\.\w+:|page\.\w+:|toBe|toHave|toEqual|✘|×", re.I)
-ENV = re.compile(r"not recognized|command not found|No module named|codec|Permission denied|Access is denied|"
-                 r"being used by another process|cannot find the path", re.I)
 SELF = re.compile(r"(?im)^[\s>*_`-]*friction:\s*(.+?)\s*[`*_]*\s*[x×]\s*(\d+)\s*[`*_.]*\s*$")
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]|\[[0-9;]+m")  # a colour code, with or without its ESC
 LINES_PER_OUTPUT = 400
@@ -104,32 +131,36 @@ class Scan:
         self.clusters = {}
         self.sessions, self.calls, self.failed = set(), 0, 0
 
-    def add(self, sid, key, line, cmd, tag, trap=None, hits=1, self_report=False):
+    def add(self, sid, t, key, line, cmd, tag, trap=None, hits=1, self_report=False):
         c = self.clusters.setdefault(key, {"key": key, "tag": tag, "trap": trap, "sessions": set(), "hits": 0,
-                                           "self": 0, "line": one_line(line, 160), "cmd": one_line(cmd, 120)})
+                                           "self": 0, "times": [], "line": one_line(line, 160),
+                                           "cmd": one_line(cmd, 120)})
         c["sessions"].add(sid); c["hits"] += hits; c["self"] += hits if self_report else 0
+        c["times"].append((t, sid, hits))
         if not c["cmd"] and cmd:
             c["cmd"] = one_line(cmd, 120)
 
-    def classify(self, sid, line, cmd, self_report=False, hits=1):
+    def classify(self, sid, t, line, cmd, own=False, self_report=False, hits=1):
+        """`own`: the command's own failure (a tool error, a shell's complaint), never a test result."""
         for name, rx, crx, fix in TRAPS:
             if rx.search(line) and (crx is None or crx.search(cmd)):
-                return self.add(sid, "trap:" + name, line, cmd, "known", (name, fix), hits, self_report)
+                return self.add(sid, t, "trap:" + name, line, cmd, "known", (name, fix), hits, self_report)
         key = norm(line)
-        if not self_report and (TEST_LINE.search(line) or (TEST_RUN.search(cmd) and not ENV.search(line))):
-            return self.add(sid, "test:" + key, line, cmd, "test", None, hits)
-        self.add(sid, key, line, cmd, "unknown", None, hits, self_report)
+        if not (own or self_report) and TEST_LINE.search(line):
+            return self.add(sid, t, "test:" + key, line, cmd, "test", None, hits)
+        self.add(sid, t, key, line, cmd, "unknown", None, hits, self_report)
 
-    def part(self, sid, p, assistant=True):
+    def part(self, sid, p, assistant=True, t=None):
         """One part of a session: a tool call (its error, or error lines in a shell's output) or a text (self-reports)."""
         self.sessions.add(sid)
+        st = p.get("state") if isinstance(p.get("state"), dict) else {}
+        t = t or (st.get("time") or {}).get("start") or (p.get("time") if isinstance(p.get("time"), dict) else {}).get("start")
         if p.get("type") == "text":
             for m in SELF.finditer(p.get("text") or "") if assistant else ():
-                self.classify(sid, m.group(1).strip("`*_ "), "", self_report=True, hits=int(m.group(2)))
+                self.classify(sid, t, m.group(1).strip("`*_ "), "", self_report=True, hits=int(m.group(2)))
             return
         if p.get("type") != "tool":
             return
-        st = p.get("state") or {}
         inp = st.get("input") or {}
         tool = p.get("name") or p.get("tool") or "?"
         cmd = str(inp.get("command") or inp.get("code") or inp.get("path") or inp.get("filePath") or
@@ -139,9 +170,17 @@ class Scan:
             self.failed += 1
             err = st.get("error")
             err = err.get("message", json.dumps(err)) if isinstance(err, dict) else str(err or "error")
-            return self.classify(sid, f"{tool}: {err.splitlines()[0] if err else 'error'}", cmd)
+            return self.classify(sid, t, f"{tool}: {err.splitlines()[0] if err else 'error'}", cmd, own=True)
         if tool not in ("shell", "bash"):  # read/grep outputs are file contents: an `Error` there is code
             return
+        code = (st.get("metadata") or {}).get("exit")
+        failed = code != 0  # no exit code known: as if it failed
+        quiet = bool(READS.search(cmd) or TEST_RUN.search(cmd))
+        if quiet and not failed:
+            return  # a read or a test run that worked: every error in it is the file's or the product's
+        # Error-shaped lines count only from a failed command that neither reads nor tests; otherwise only the
+        # command's own complaints (OWN, and pwsh's `| <message>` lines).
+        loud = failed and not quiet
         msg = []  # a PowerShell message wraps over several `     | ` lines: one error
         for line in text_of(st).splitlines()[:LINES_PER_OUTPUT] + [""]:
             clean = ANSI.sub("", line)
@@ -149,10 +188,14 @@ class Scan:
                 msg.append(clean.strip().lstrip("| ").strip())
                 continue
             if msg:
-                self.classify(sid, " ".join(msg)[:600], cmd)
+                self.classify(sid, t, " ".join(msg)[:600], cmd, own=True)
                 msg = []
-            if len(clean) < 600 and ERROR.search(clean) and not NOT_ERROR.search(clean):
-                self.classify(sid, clean.strip(), cmd)
+            if len(clean) >= 600 or NOT_ERROR.search(clean):
+                continue
+            if OWN.search(clean):
+                self.classify(sid, t, clean.strip(), cmd, own=True)
+            elif loud and ERROR.search(clean):
+                self.classify(sid, t, clean.strip(), cmd)
 
 
 def default_db():
@@ -179,12 +222,13 @@ def read_db(scan, path, since, everyone):
                                      ("" if everyone else " and parent_id is not null"), (since,))}
     role = "m.type" if "session_message" in tables else "null"
     join = " left join session_message m on m.id = p.message_id" if "session_message" in tables else ""
-    rows = db.execute(f"select p.session_id, p.data, {role} from session_part p{join} where p.type in ('tool', 'text')"
-                      " and p.time_created > ? order by p.session_id, p.time_created, p.ordinal", (since,))
-    for sid, data, kind in rows:
+    rows = db.execute(f"select p.session_id, p.data, {role}, p.time_created from session_part p{join} where p.type in"
+                      " ('tool', 'text') and p.time_created > ? order by p.session_id, p.time_created, p.ordinal",
+                      (since,))
+    for sid, data, kind, t in rows:
         if sid in kids:
             try:
-                scan.part(sid, json.loads(data), assistant=kind in (None, "assistant"))
+                scan.part(sid, json.loads(data), assistant=kind in (None, "assistant"), t=t)
             except (ValueError, AttributeError, TypeError):
                 continue
     db.close()
@@ -217,11 +261,31 @@ def load_state(path):
         return {"promoted": {}}
 
 
+def when_ms(text):
+    """A local date or time (`2026-11-26`, `2026-11-26T14:30`) in epoch ms."""
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return int(time.mktime(time.strptime(text.strip(), fmt)) * 1000)
+        except ValueError:
+            continue
+    raise SystemExit(f"friction: {text}: want a date like 2026-11-26 or 2026-11-26T14:30")
+
+
+def mark_fixed(scan, fixed):
+    """A trap fixed at source: its hits and sessions since the fix; it never promotes again."""
+    for c in scan.clusters.values():
+        date = fixed.get(c["trap"][0]) if c["trap"] else None
+        if date:
+            ms = when_ms(date)
+            since = [(sid, h) for t, sid, h in c["times"] if t and t >= ms]
+            c["fixed"] = (date, len({sid for sid, _ in since}), sum(h for _, h in since))
+
+
 def promote(scan, n, state):
     """Mark PROMOTE clusters; answers the keys new to `state` (and records them there)."""
     new, done = [], state.setdefault("promoted", {})
     for c in scan.clusters.values():
-        c["promote"] = c["tag"] != "test" and len(c["sessions"]) >= n
+        c["promote"] = c["tag"] != "test" and len(c["sessions"]) >= n and not c.get("fixed")
         c["new"] = c["promote"] and c["key"] not in done
         if c["new"]:
             new.append(c["key"])
@@ -239,7 +303,11 @@ def report(scan, label, top):
     pct = f"{100 * scan.failed / scan.calls:.1f}%" if scan.calls else "-"
     lines = [f"# Friction: {len(scan.sessions)} sessions ({label}), {scan.calls} tool calls, {scan.failed} failed "
              f"({pct}), {sum(c['hits'] for c in cs if c['tag'] != 'test')} error lines in {len(cs)} clusters", ""]
-    flag = lambda c: ("PROMOTE NEW" if c["new"] else "PROMOTE") if c["promote"] else ""
+    def flag(c):
+        if c.get("fixed"):
+            date, ss, hs = c["fixed"]
+            return f"fixed {date}: {hs} hits in {ss} sessions since"
+        return ("PROMOTE NEW" if c["new"] else "PROMOTE") if c["promote"] else ""
     unknown = sorted((c for c in cs if c["tag"] == "unknown"), key=rank)
     lines += ["## Unknown, by sessions", "", "| sessions | hits | flag | line | example command |", "|---|---|---|---|---|"]
     hits = lambda c: f"{c['hits']} ({c['self']} self)" if c["self"] else str(c["hits"])
@@ -265,7 +333,20 @@ def main(argv=None):
     ap.add_argument("--promote", type=int, default=5, help="sessions that make a cluster PROMOTE")
     ap.add_argument("--state", default=None, help="JSON file remembering promoted clusters (one alert each)")
     ap.add_argument("--top", type=int, default=15)
+    ap.add_argument("--fixed", action="append", default=[], metavar="TRAP=DATE",
+                    help="a known trap fixed at source on DATE (kept in --state); repeatable")
     a = ap.parse_args(argv)
+    names = {name for name, *_ in TRAPS}
+    state = load_state(a.state)
+    fixed = state.setdefault("fixed", {})
+    changed = False
+    for f in a.fixed:
+        name, _, date = f.partition("=")
+        if name not in names:
+            raise SystemExit(f"friction: --fixed {f}: unknown trap; known: {', '.join(sorted(names))}")
+        when_ms(date)
+        changed |= fixed.get(name) != date.strip()
+        fixed[name] = date.strip()
     scan = Scan()
     if a.sources:
         for src in a.sources:
@@ -274,10 +355,10 @@ def main(argv=None):
     else:
         read_db(scan, a.db or default_db(), since_ms(a.since), a.all)
         label = f"{'all' if a.all else 'subagents'}, last {a.since}"
-    state = load_state(a.state)
+    mark_fixed(scan, fixed)
     new = promote(scan, a.promote, state)
     print(report(scan, label, a.top))
-    if a.state and new:
+    if a.state and (new or changed):
         p = pathlib.Path(a.state)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(state, indent=1, sort_keys=True), encoding="utf-8")

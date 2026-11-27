@@ -85,4 +85,4 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **Every 4 hours**, a no-model shell automation: `python -I -X utf8 tools/work/friction.py --since 48h --state .work/friction-state.json`; exit 1 = a NEW PROMOTE: read the report, unknown clusters first.
 - **A PROMOTE (5+ sessions) is fixed at source first** (install, env var, wrapper), checked against one session's lines; a brief line only for what can't be fixed; its regex joins `TRAPS`.
-- **Each fix is a lesson with its guard** (`#5`). **Rescan** `--since` the fix: its sessions must drop.
+- **Each fix is a lesson with its guard** (`#5`). Then `--fixed <trap>=<date>`: the report counts its hits since (an old shell).
