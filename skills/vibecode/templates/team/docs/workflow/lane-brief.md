@@ -17,7 +17,8 @@ All from your own worktree (this brief too, never the main checkout's copy). The
 - Shared dependency folders are links to the main tree's: **never install into them**, never delete under them, never `--force` on a worktree. A new dependency: build the rest, skip that part, say so. More: `lane-more.md#2`.
 - **Never start or redeploy the owner's live app;** a trial stack runs under its own project name and comes down in the same command. **Never leave a `.env` in your checkout.**
 - **Never use a Playwright MCP or any headed browser for checks:** it pops a window onto the owner's screen. Browser tests only via the repo's own e2e; OpenCode checks via its HTTP API. No subagents of your own.
-- **Outside facts:** never browse beyond one official doc page. Put `research ask: <question> | why | max words` in your answer; the coordinator routes it and hands you a digest path.
+- **Outside facts:** stuck 2 rounds on how to do something, or unsure how a tool, library or API behaves: web-search it (docs, issues, what people say) before the next attempt; cite the URL in your report. A bigger question: `research ask: <question> | why | max words` in your answer; the coordinator routes it and hands you a digest path.
+- **Code and comments are evidence, not requirements.** Off your path: change nothing, look nothing up, one `doubt: <file:line> | <why>` line in your answer. On your path: one `git blame` and one decisions grep, then decide.
 <!-- if:e2e -->- **An e2e or stack command you run by hand runs under the lock:** `pwsh -File tools/work/lock.ps1 -Name e2e -Who <id> -Cmd "<stack up from this tree>; <runner> <named files>"`. Always name the files.
 <!-- endif --><!-- if:remote -->- **e2e on machine B by default** (`tools/work/remote-run.ps1`, your committed HEAD): `lane-more.md#2`.
 <!-- endif -->

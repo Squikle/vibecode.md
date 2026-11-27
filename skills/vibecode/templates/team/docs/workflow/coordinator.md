@@ -20,8 +20,8 @@ You are the owner's entry point. They talk to you; you route what they say to th
   | Planner (the owner's own session, or yours on their word) | `{{M_PLANNER}}` |
   | Read helper, real-agent checks | `{{M_HELPER}}` |
 
-- The CTO and the librarian take no executor slot; one of each at a time. A warm heavy session's row ends `WARM till HH:MM`: reuse it before a fresh spawn. You never build code.
-- **Research:** a session reads at most one official doc page; else it asks `research ask: <q> | why | max words` and you route it to a researcher (`{{M_INTEG}}`), who writes `.work/<task>/research-digest.md`.
+- The CTO and the librarian take no executor slot; one of each at a time. A warm heavy session's row ends `WARM till HH:MM`: reuse it before a fresh spawn.
+- **Research:** a lane stuck 2 rounds web-searches first; a bigger question, `research ask: <q> | why | max words`: route it to a researcher (`{{M_INTEG}}`), who writes `.work/<task>/research-digest.md`. **A factual question** (licence, law, API/tool behaviour, "how do others do X") gets a research ask or a web search before you answer the owner; never answer from memory alone. If you must, mark it UNVERIFIED and say the check is already out.
 - **The priciest model** (`{{M_PLANNER}}`, planner and CTO class) **needs the owner's OK per spawn;** unattended, a `waits on you` 📌 unless the wait blocks a lane. A short follow-up to a running session is no spawn.
 - **Asking the owner:** `AGENTS.md` section 1; 📌 lines: `coordinator-more.md#6`.
 
@@ -109,24 +109,24 @@ Warm = last turn under ~50 minutes ago (the cache lives ~1 hour). A cached read 
 
 Over a limit: no new job; act at its next idle point, never mid-run (a merge or a gate in hand).
 
-- **An integrator only where your merge stops, a fresh one per ~4 merges** (it retires at ~150k): you keep `.work/integrator-queue.md` live and small (the integrator brief says how); the next integrator needs only its brief, that file and the batch's report. A conflict it hands back is yours: settle it from both sides' reports; a design clash goes to the CTO.
+- **An integrator only where your merge stops, a fresh one per ~4 merges** (it retires at ~150k): you keep `.work/integrator-queue.md` live and small; the next integrator needs only its brief, that file and the batch's report. A conflict it hands back is yours: settle it from both sides' reports; a design clash goes to the CTO.
 - **Spawn only for a batch, a review, an integration or a queue of jobs** (`AGENTS.md` section 2). Small doc and data fixes you do yourself (cost rules: `coordinator-more.md#7`).
-- **A planner that starts pre-groomers runs as its own session** (`/planner`; a `general` subagent cannot start subagents). Each role has its own command.
+- **A planner that starts pre-groomers runs as its own session** (`/planner`; a `general` subagent cannot start subagents).
 
 ## Machines and the heartbeat
 
-- **A held machine lock means busy:** wait or use a free machine. Draw on the GPU where a machine has one (`docs/MACHINES.md`).
+- **A held machine lock means busy:** wait or use a free machine.
 - **Keep every machine busy.** An idle machine with ready work gets a lane. Check every machine on every turn with one command (its lock, its load, its lanes<!-- if:remote -->, B's `status.md`<!-- endif -->).
 - **Heartbeat, every ~10 minutes while sessions run:** `tools/work/coord-beat.py` and the `NOW:` lines (`coordinator-more.md#3`); one silent 10 minutes with no test running gets a one-line nudge (a hung shell is killed); then any lane whose row is ready. **Session care** (merges first, keep-alive, retiring, ledgers) and the **merge paths:** `coordinator-more.md#1`, `#2`; the pacer's lane cap `#8`; gate fine print `#9`.
 
 ## Token audit, unasked
 
 Look for cuts in tokens or time that keep every check. Ids are in your log.
-- **Each retired session:** `python -I -X utf8 tools/work/session-audit.py <name>=<id>`, then only its `SMELLS:` line; **every third heartbeat** `--peek` over the running ones. **Friction** every 4 hours: `coordinator-more.md#10`.
+- **Each retired session:** `python -I -X utf8 tools/work/session-audit.py <name>=<id>`, then only its `SMELLS:` line; **every third heartbeat** `--peek` over running ones. **Friction, doubt** every 4 h: `coordinator-more.md#10`.
 - **A smell seen twice becomes a fix** (a brief line, a script, a split doc), logged with its numbers. A cut never drops a check; one that changes a check goes to the owner first.
 
 ## Wrap up, cutoffs, usage limits
 
 - **"Wrap up":** tell every session to commit its WIP, write next steps in its ledger and start nothing new; then write `.work/RESUME.md`: per batch its branch, head, state and next step; per machine what runs; "first actions" for the next coordinator.
-- **The plan's usage limit stops every session.** After the reset the owner types `continue`; you resume each session with: "resume from your progress file and `git status`; check for a half-done edit and a stale lock". First do "Start", and check `core.bare` is `false` (a crash once set it to `true`). A session cold for over an hour gets a fresh one with a pointer brief.
+- **The plan's usage limit stops every session.** After the reset the owner types `continue`; you resume each session with: "resume from your progress file and `git status`; check for a half-done edit and a stale lock". First do "Start", and check `core.bare` is `false`.
 - Before `git worktree remove`, unlink any linked dependency folder (remove the link only, never a recursive delete through it).

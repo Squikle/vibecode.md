@@ -36,8 +36,8 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 ## 5. The checkpoint and the handover
 
-- **`.work/coordinator-now.md`** (git-ignored), yours to keep: `## Start` (what a fresh coordinator reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions as a table, `| Role | Tag | Session | Batch | Wt | Head | Next |`, which `tools/vault/vault_now.py` turns into the vault's Now note; machines; next moves), rewritten at every checkpoint. A lesson edits the rule it changes, one line with its guard, no stories; compact it past ~25 KB. **Only you write lessons** (no number clashes): a lane sends `lesson candidate: <rule> | guard: <guard>`, you word and file it. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
-- **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, recreate your automations, ask the owner for `/pacer on` here, adopt the running children, carry on with the next moves."
+- **`.work/coordinator-now.md`** (git-ignored, yours): `## Start` (a fresh coordinator's reads, in order), `## Rules` (the owner's standing word, edited in place, never appended twice; your own calls marked "mine"), `## State` (live sessions as a table, `| Role | Tag | Session | Batch | Wt | Head | Next |`, which `tools/vault/vault_now.py` turns into the vault's Now note; machines; next moves), rewritten at every checkpoint. A lesson edits the rule it changes, one line with its guard, no stories; compact it past ~25 KB. **Only you write lessons** (no number clashes): a lane sends `lesson candidate: <rule> | guard: <guard>`, you word and file it. One-line events still go to your log. **Where it and these docs disagree, it wins**, always.
+- **A fresh coordinator** gets a short prompt, never a summary of your chat: "You are the coordinator of {{PROJECT}}, taking over. Read `.work/coordinator-now.md`, then the files its Start lists, then your log's last ~40 lines. Run the heartbeat, recreate your automations, ask the owner for `/pacer on` here, adopt the running children, carry on."
 - **The old coordinator goes idle first:** two coordinators both spawn. The new one logs `HANDOVER: <new id> took over`; the old checks for it before acting on a late result. Automations steer the session that made them: the new one recreates its own.
 - **Adopt the children:** a background result goes to the session that spawned it. Send each running child one line with your session id ("report to me from now on; carry on"). Until you have children of your own, run `coord-beat.py --parent <old id>`.
 
@@ -54,7 +54,7 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 ## 7. Cost
 
-- **Lookups:** a grep when it is cheaper than a helper; else **one** `{{M_HELPER}}` helper takes all the questions at once (n questions, one cold start), spawned in a step with your other calls. A cheap helper for a non-critical question is fine.
+- **Lookups:** a grep when cheaper; else **one** `{{M_HELPER}}` helper takes all the questions at once (n questions, one cold start), spawned in a step with your other calls. A cheap helper is fine for a non-critical one.
 - **No change for its own sake:** weigh it, or say in a line why the current setup is best.
 - **Small doc and data fixes you do yourself** (a status line, a count, a typo); this overrides "small doc fixes wait for the librarian". Read code only to route (which files, "Same files as").
 - **Fill every cheap property** (links, the `--from` cause, `From:` lines): a missing one costs a lookup.
@@ -66,15 +66,15 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **Lane cap = the pacer's mode** when it is on (`/pacer`; the kit's `opencode-global/pacer.md`): BURST ≤ 7, GO ≤ 5, EASE ≤ 3, SLOW ≤ 2, HOLD and LIMITED none new; never over {{EXECUTORS}}. Helpers, the planner, the CTO and the librarian don't count.
 - **On a `[pacer ...] MODE ...` line:** answer in 2 lines and spawn within the new cap.
-- **Usage check:** at each MODE line, before a burst and between fresh spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder). The 5-hour window up more than ~15 points in 30 minutes: drop one mode. **Project the week** each time: (100 - week %) / days to its reset; under one 5-hour window's worth a day, tell the owner. The rest of the quota math: the kit's `pacer.md`.
+- **Usage check:** at each MODE line, before a burst and between fresh spawns, read the usage once (`python -I plugins/pacer/pacer.py status` in the OpenCode config folder). The 5-hour window up 15+ points in 30 minutes: drop one mode. **Project the week** each time: (100 - week %) / days to its reset; under one 5-hour window's worth a day, tell the owner.
 - **Gate cap:** no fresh builder while 4 or more gates run. A gate queued on a lock or a CPU slot uses ~0 CPU; `gate.py`'s slots hold back the rest.
 - Parallel lanes whenever nothing blocks.
 
 ## 9. Gate and merge, the fine print
 
-- **Who runs which gate:** once per batch, in full, `gate.py run <head> --base <sha it was cut from>`: the reviewer for a reviewed batch, after its fixes; else the executor. A red is rerun alone (`--only <file>[:line] ...`). A full gate can take hours: one foreground call, the longest timeout, only on a head with a clean `git merge-tree --write-tree main <sha>` (exit 0; docs-only conflicts OK). Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
+- **Who runs which gate:** once per batch, in full, `gate.py run <head> --base <sha it was cut from>`: the reviewer for a reviewed batch, after its fixes; else the executor. A red is rerun alone (`--only <file>[:line] ...`). A full gate takes hours: one foreground call, the longest timeout, on a head with a clean `git merge-tree --write-tree main <sha>` (exit 0; docs-only conflicts OK). Ship refuses an `--only` verdict and needs the main worktree's HEAD at the gated sha.
 - **Stacks and locks:** `--config <json>` picks a machine set; each set has its own lock name. **No cancel:** kill only your own test tree and free only your own lock. **Don't pin a stack** (`--stack N`) unless asked: a pinned gate waits while the other is free. A wait-only waiter in its own foreground shell hears no follow-up: kill it, don't message it.
-- **Keep the second test machine busy:** a gate whose browser part waited 30+ minutes for a stack, the rest done: run that part on the other machine (`--parts <part>`, its config) and kill the waiting tree. **A redundant browser part** (a full run of the same code on the other machine exists, only docs changed since): stop it; the lane cites that run's log. A new commit supersedes your own running gate: kill its tree too.
+- **Keep the second test machine busy:** a gate whose browser part waited 30+ minutes for a stack, the rest done: run that part on the other machine (`--parts <part>`, its config) and kill the waiting tree. **A redundant browser part** (the other machine ran the same code in full; only docs changed since): stop it; the lane cites that run's log. A new commit supersedes your running gate: kill its tree too.
 - **Mixed line endings** merge only through `tools/work/eolmerge.py`.
 - **Every merge names its cause:** `merge-log.py --from '<why>'` (single quotes), else it refuses with `NO CAUSE`; `cause.py` checks one. A batch with no spec carries a `From:` line in its report (the owner's word with a date, or the parent batch).
 - **Merges** stamp times from the real clock (`Get-Date` / `date`), never a guess.
@@ -85,4 +85,5 @@ No new feature lanes → CTO health sweep → the planner orders the refactor ro
 
 - **Every 4 hours**, a no-model shell automation: `python -I -X utf8 tools/work/friction.py --since 48h --state .work/friction-state.json`; exit 1 = a NEW PROMOTE: read the report, unknown clusters first.
 - **A PROMOTE (5+ sessions) is fixed at source first** (install, env var, wrapper), checked against one session's lines; a brief line only for what can't be fixed; its regex joins `TRAPS`.
+- **`doubt.py` with it** (`--state .work/doubt-state.json`): a PROMOTE (3+ lanes doubted a file) goes to the CTO queue as a patch-vs-rework look, never straight to a lane.
 - **Each fix is a lesson with its guard** (`#5`). Then `--fixed <trap>=<date>`: the report counts its hits since (an old shell).
