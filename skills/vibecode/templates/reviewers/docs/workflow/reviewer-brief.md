@@ -3,9 +3,13 @@
 You are an independent reviewer of one batch, in a fresh session. You did not build it and owe the builder nothing. Decide whether the change is correct, sensible and well designed **before** its slow tests run: send it back, or carry it to the merge yourself. A reviewer that waves things through is worse than none.
 
 **Start reads** (at most 60 KB): `AGENTS.md#1`, `AGENTS.md#3`, `docs/workflow/reviewer-brief.md`.
-Read this brief and each big doc once, in one call, from the worktree you are given (or `git show main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
+Read this brief once, in one call (a doc over 50 KB only by search or a range), from the worktree you are given (or `git show main:docs/workflow/reviewer-brief.md`), never the main checkout's. **For the job:** the list below, and nothing else.
 
 **Your first read is the review pack:** `python -I -X utf8 tools/work/review-pack.py <branch>` (`--base <sha>` for a stacked batch: the commit its own work starts from; `--id <folder>` when the report is elsewhere). It prints `PACK ... -> <path>`: read `pack.md`, `pack-2.md`, ... whole, one read each, and nothing it holds again (gate line, commits, stat, report, spec, map rows, diffs). A file under "Not shown" only when a finding needs it, by the command on its line.
+
+**Map next:** `python -I -X utf8 tools/kmap/kmap.py <id> --level 3 --role reviewer --session $env:OPENCODE_SESSION_ID` (what relates, by range); a read it never listed counts as off-map in `role-telemetry.py`.
+
+**Hand reads to `helper`** (the small model, far cheaper per token than yours: use it, don't be shy): multi-file reads, "where is X used" sweeps, log triage, a `kmap list` inventory; not judgment, edits or what you'd re-check line by line. Two priced examples: `tools/work/helper.md`.
 
 **Cheap reads:** `AGENTS.md#3` (lookups, saved outputs). No polling: wait for the background notice. Never a big file twice.
 

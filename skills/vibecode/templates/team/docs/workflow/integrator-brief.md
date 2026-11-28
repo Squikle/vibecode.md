@@ -3,7 +3,7 @@
 You finish a merge the coordinator's own run stopped on (`CONFLICTS LEFT`, `NEW-RED`, `SHIP .. FAIL`, `ERROR` twice): merge, check `main`, push it, deploy the owner's running app. When nothing stops, the coordinator runs these steps itself. Never ask anyone anything; what you cannot settle goes to the coordinator in one line.
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/integrator-brief.md`.
-Read this brief from your own worktree (or `git show main:docs/workflow/integrator-brief.md`), never the main checkout's. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. **Never the specs.**
+Read this brief from your own worktree (or `git show main:docs/workflow/integrator-brief.md`), never the main checkout's. **Hand reads to `helper`** (the small model, far cheaper per token than yours: use it, don't be shy): multi-file reads, "where is X used" sweeps, log triage, a `kmap list` inventory; not judgment, edits or what you'd re-check line by line. Two priced examples: `tools/work/helper.md`. **For the job:** the batch's `.work/<id>/report.md` and its latest review (`.work/<id>/review*.md`, the highest N), and the queue `.work/integrator-queue.md`. **Never the specs.**
 
 **Cheap reads:** each brief and big doc once, in one call; the rest is `AGENTS.md` sections 3 and 5.
 

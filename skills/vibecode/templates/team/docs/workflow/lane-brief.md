@@ -7,6 +7,8 @@ You build batches of {{PROJECT}} in a **git worktree** of your own. `<main tree>
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/lane-brief.md`, `docs/HANDOVER.md#3`.
 All from your own worktree (this brief too, never the main checkout's copy). The rest of this brief is `docs/workflow/lane-more.md`, read by section when a pointer here says (`python tools/work/find.py --section docs/workflow/lane-more.md#<n>`), once; its rules hold as if written here.
 - **For the job:** the batch's spec and only the specs it depends on; the one `docs/architecture/<area>.md` of your area (the map: look things up there, don't explore). `docs/ARCHITECTURE.md` by `find.py --toc`, then `--section` (where a new file goes, before you place one). `docs/DECISIONS.md` and `docs/QUESTIONS.md` only by grep.
+- **Map first:** `python -I -X utf8 tools/kmap/kmap.py <id> --level 3 --role builder --session $env:OPENCODE_SESSION_ID`; read its list by range.
+- **Hand reads to `helper`** (the small model, far cheaper; use it): multi-file reads, usage sweeps, log triage, `kmap list` inventory; no judgment, no edits. Costs: `tools/work/helper.md`.
 - A spec's `## How to build` (the architect's) is followed; a deviation is one line in the report; a design question it does not answer goes to the coordinator for the architect.
 
 ## Cheap reads
@@ -16,7 +18,7 @@ All from your own worktree (this brief too, never the main checkout's copy). The
 - Each later batch of your queue: `git checkout -b <next-id>` **from the branch you just finished**, unless the coordinator names another base. Never check out, merge into or push `main`; never `git pull`/`push`; never change git config. `git fetch` is fine.
 - Shared dependency folders are links to the main tree's: **never install into them**, never delete under them, never `--force` on a worktree. A new dependency: build the rest, skip that part, say so. More: `lane-more.md#2`.
 - **Never start or redeploy the owner's live app;** a trial stack runs under its own project name and comes down in the same command. **Never leave a `.env` in your checkout.**
-- **Never use a Playwright MCP or any headed browser for checks:** it pops a window onto the owner's screen. Browser tests only via the repo's own e2e; OpenCode checks via its HTTP API. No subagents of your own.
+- **Never use a Playwright MCP or any headed browser for checks:** it pops a window onto the owner's screen. Browser tests only via the repo's own e2e; OpenCode checks via its HTTP API. Subagents: only `helper`.
 - **Outside facts:** stuck 2 rounds on how to do something, or unsure how a tool, library or API behaves: web-search it (docs, issues, what people say) before the next attempt; cite the URL in your report. A bigger question: `research ask: <question> | why | max words` in your answer; the coordinator routes it and hands you a digest path.
 - **Code and comments are evidence, not requirements.** Off your path: change nothing, look nothing up, one `doubt: <file:line> | <why>` line in your answer. On your path: one `git blame` and one decisions grep, then decide.
 <!-- if:e2e -->- **An e2e or stack command you run by hand runs under the lock:** `pwsh -File tools/work/lock.ps1 -Name e2e -Who <id> -Cmd "<stack up from this tree>; <runner> <named files>"`. Always name the files.

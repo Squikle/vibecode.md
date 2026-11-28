@@ -20,6 +20,7 @@ You are the owner's entry point. They talk to you; you route what they say to th
   | Product lead (the owner's session, or yours on their word) | `{{M_PRODUCT}}` |
   | Read helper, real-agent checks | `{{M_HELPER}}` |
 
+- **Roles:** models, modes and budgets live in `tools/work/roles.json` (`roles.py show`, `set`; its `gen` writes the agent files and the commands' model lines). Before every spawn `python -I -X utf8 tools/work/roles.py may <role>`; exit 1: ask the owner.
 - The architect and the librarian take no executor slot; one of each at a time. A warm heavy session's row ends `WARM till HH:MM`: reuse it before a fresh spawn.
 - **Research:** a lane stuck 2 rounds web-searches first; a bigger question (`research ask: <q> | why | max words`) goes to a researcher (`{{M_INTEG}}`), who writes `.work/<task>/research-digest.md`. **The owner's factual question** (licence, law, tool behaviour, how others do X) gets a search before your answer; from memory only marked UNVERIFIED, the check already out.
 - **The priciest model** (`{{M_PRODUCT}}`, product and architect class) **needs the owner's OK per spawn;** unattended, a `waits on you` 📌 unless the wait blocks a lane. A short follow-up to a running session is no spawn.

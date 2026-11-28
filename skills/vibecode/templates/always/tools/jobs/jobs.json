@@ -1,0 +1,14 @@
+{
+  "_doc": "The background jobs every machine runs, checked in (tools/jobs/jobs.py). `every`: an opencode automation interval. `run`: a Python script under the repo and its arguments, so Windows and macOS run the same command; `{work}` is the main tree's .work, `{root}` this checkout. `os`: the platforms it runs on (sys.platform), all when absent. `alert_exit`: exit codes that mean an alert, not a failure (role-telemetry's 1: a NEW flag): `jobs.py run` prints ALERT and exits 0. Automations are named `<prefix><name>` (the project's name); `jobs.py sync` creates, replaces and deletes only those.",
+  "prefix": "{{PROJECT}}:",
+  "jobs": [
+    {
+      "name": "role-telemetry",
+      "every": "4 hours",
+      "alert_exit": [1],
+      "run": ["tools/work/role-telemetry.py", "--since", "24h", "--value",
+              "--out", "{work}/telemetry", "--state", "{work}/telemetry/state.json", "--log", "{work}/telemetry/flags.log",
+              "--candidates", "{work}/kmap/candidates.jsonl"]
+    }
+  ]
+}

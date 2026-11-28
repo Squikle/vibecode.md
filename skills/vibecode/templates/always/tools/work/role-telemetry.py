@@ -2,15 +2,22 @@
 and which files it reads that the knowledge map never gave it. Zero model tokens: it reads the opencode database.
 
 Usage: python -I -X utf8 tools/work/role-telemetry.py [--db <opencode.db>] [--since 24h] [--project <text>]
-                                                      [--state <file>] [--rebaseline] [--log <file>] [--json]
+                                                  [--state <file>] [--rebaseline] [--log <file>] [--json]
                                                       [--seen-dir <dir>] [--flag-share 0.15] [--flag-min 20]
+                                                  [--out <dir>] [--candidates <file>] [--session <id>]...
+                                                  [--value [--work <dir>] [--registry <file>] [--vault <dir>]]
        python -I -X utf8 tools/work/role-telemetry.py --examples <role> <rule> [--since 7d]
   Reads `session_v2`, `session_message` and `session_part` read-only (`--db`, default `$XDG_DATA_HOME/opencode/
   opencode.db`, else `~/.local/share/opencode/opencode.db`), the sessions updated in `--since` (`90m`, `24h`, `7d`),
   `--project`: only sessions whose directory holds that text.
+  `--out <dir>`: also writes `<dir>/<date>.md` and `<date>.json` (per role, per session: $, tokens, first request,
+  kmap calls against raw lookups, off-map reads, errors; `tools/work/telemetry_sessions.py`). `--candidates`:
+  appends `off-map-read` links (a file read off the map twice in one session) to that JSONL. `--value`: the rating of
+  each role in `tools/work/roles.json` (`tools/work/role_value.py`) from the reviews in `--work` (default
+  the main tree's `.work`), and `--vault <dir>` writes it as `<dir>/live/Roles.md`.
 
-A session's role: its `agent` when that is a role (old names map: planner -> product, cto -> architect), else the
-brief it was started with (the first user message), else a tag at the start of its title, else `other`. Each finished
+A session's role and $: `tools/work/role_data.py` (agent, else brief, else title tag; the database's cost, else
+list prices). Each finished
 tool call is one of: ROLE-TOOL (a `tools/**` script ran), REPLACEABLE (a raw command a project tool covers: RULES,
 each with the tool to use), ADHOC (an inline script: a here-string into an interpreter, `python -c`), RAW (any other
 shell) or BUILTIN (read, grep, edit...; a whole read of a doc that is searched by section counts as REPLACEABLE).
@@ -32,34 +39,18 @@ to stdout and writes nothing but `--state` and `--log`. The rungs from a flag to
 import argparse
 import collections
 import json
-import os
 import pathlib
 import re
-import sqlite3
-import subprocess
 import sys
 import time
 
-ROLES = {"coordinator", "product", "architect", "plan-review", "pregroomer", "executor", "reviewer", "integrator",
-         "librarian", "helper", "builder"}
-ALIASES = {"planner": "product", "cto": "architect", "pre-groomer": "pregroomer", "scout": "pregroomer",
-           "plan-reviewer": "plan-review", "lane": "executor"}
-BY_BRIEF = [  # the first user message; first match wins
-    ("plan-review", r"workflow[\\/]plan-review\.md|You review one planning pass"),
-    ("reviewer", r"reviewer-brief|You review one batch"),
-    ("integrator", r"integrator-brief|You are the integrator"),
-    ("executor", r"lane-brief|You are executor|You are lane"),
-    ("pregroomer", r"workflow[\\/]pregroomer\.md|You are the pre-groomer"),
-    ("architect", r"workflow[\\/](architect|cto)\.md|You are the (architect|CTO)\b"),
-    ("librarian", r"workflow[\\/]librarian\.md|You are the librarian"),
-    ("product", r"workflow[\\/]product\.md|docs[\\/]PLANNING\.md|You are the (product lead|planner)\b"),
-    ("coordinator", r"workflow[\\/]coordinator\.md|coordinator-now|You are the coordinator"),
-    ("builder", r"You are the builder"),
-    ("helper", r"^Answer (this|these) question"),
-]
-BY_TITLE = [("plan-review", r"^(PLANREV|Plan review)"), ("reviewer", r"^(REV|Review)"),
-            ("architect", r"^(ARCH|CTO)"), ("product", r"^(PROD|PLAN|Planner)"), ("pregroomer", r"^(PREGROOM|Pre-groom|SCOUT)"),
-            ("librarian", r"^(LIB|Librarian)"), ("integrator", r"^(INT\d|Integrat)"), ("coordinator", r"[Cc]oordinator")]
+HERE = pathlib.Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))  # `python -I` leaves it off
+import role_data  # noqa: E402
+import role_value  # noqa: E402
+import telemetry_sessions as ts  # noqa: E402
+
+ALIASES = role_data.ALIASES
 # (name, a raw command's pattern, the tool that covers it, the roles it applies to or None for all)
 RULES = [
     ("code-def-grep", r"\b(git\s+grep|grep|rg|select-string|sls)\b.*(\b(function|def|class|interface)\s+\w|"
@@ -75,7 +66,7 @@ RULES = [
      {"coordinator"}),
     ("review-diff", r"\bgit\s+(diff|show|log)\b[^|;]*\.\.\.?", "review-pack.py <branch>", {"reviewer"}),
     ("history-dig", r"\bgit\s+(log|blame)\b[^|;]*(-L|--follow|-S|-G|--name-only)", "a doubt: line, then one blame",
-     {"executor"}),
+     {"builder"}),
     ("polling", r"start-sleep|\bsleep\s+\d|wait-process[^|;]*-timeout", "a foreground run / the background notice", None),
     ("backlog-edit", r"(set-content|out-file|writealltext|add-content)[^|;]*BACKLOG", "order.py word (rows by id)", None),
 ]
@@ -92,26 +83,12 @@ INLINE_FN = re.compile(r"(?:^|[;\n{])\s*function\s+([A-Za-z_][\w-]*)|(?:^|[;\n])
 NORM = [(re.compile(r"(?:[A-Za-z]:|~)?[\\/][^\s'\"|;]+"), "<path>"), (re.compile(r"\b[0-9a-f]{7,40}\b"), "<sha>"),
         (re.compile(r"'[^']*'|\"[^\"]*\""), "<q>"), (re.compile(r"\d+"), "N")]
 READ_KINDS = re.compile(r"\.(md|ts|tsx|js|jsx|mjs|py|css|go|rs|java|kt|cs|rb|php|vue|svelte)$", re.I)
-START_READS = re.compile(r"(^|/)(AGENTS\.md|docs/workflow/|\.work/)", re.I)
-
-
-def default_db():
-    base = os.environ.get("XDG_DATA_HOME") or str(pathlib.Path.home() / ".local" / "share")
-    return pathlib.Path(base) / "opencode" / "opencode.db"
+START_READS = re.compile(r"(^|/)(AGENTS\.md|docs/workflow/|docs/(PLANNING|HANDOVER)\.md|\.work/)", re.I)
 
 
 def default_seen():
-    """`.work/kmap/seen/` in the main checkout of the repository this tool lives in."""
-    root = pathlib.Path(__file__).resolve().parents[2]
-    try:
-        out = subprocess.run(["git", "-C", str(root), "rev-parse", "--git-common-dir"], capture_output=True, text=True)
-        common = pathlib.Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
-    except OSError:
-        common = None
-    if common:
-        common = common if common.is_absolute() else root / common
-        root = common.resolve().parent if common.name == ".git" else root
-    return root / ".work" / "kmap" / "seen"
+    """`.work/kmap/seen/` in the main checkout of the repository this tool lives in (its `.work`: parents[1])."""
+    return role_data.main_work(HERE.parents[1]) / "kmap" / "seen"
 
 
 def since_ms(text):
@@ -126,19 +103,6 @@ def norm(cmd):
     for rx, rep in NORM:
         s = rx.sub(rep, s)
     return re.sub(r"\s+", " ", s)[:90]
-
-
-def role_of(agent, brief, title):
-    agent = ALIASES.get((agent or "").lower(), (agent or "").lower())
-    if agent in ROLES:
-        return agent
-    for name, pat in BY_BRIEF:
-        if brief and re.search(pat, brief[:3000], re.I | re.M):
-            return name
-    for name, pat in BY_TITLE:
-        if re.search(pat, title or ""):
-            return name
-    return "other"
 
 
 def classify(tool, inp, role):
@@ -170,6 +134,10 @@ class Scan:
         self.fns = collections.defaultdict(lambda: [0, set(), set()])  # name -> defs, sessions, roles
         self.examples = collections.defaultdict(list)
         self.read_paths = collections.defaultdict(list)                # session -> read paths
+        self.meta = {}                                                 # session -> role_data's record
+        self.per = collections.defaultdict(ts.new_rec)                 # session -> its own counts
+        self.off_paths = collections.defaultdict(collections.Counter)  # session -> off-map path -> reads
+        self.seeds, self.offmap_n = {}, collections.Counter()          # session -> the topic it asked most
 
     def call(self, sid, p):
         st = p.get("state") or {}
@@ -180,6 +148,8 @@ class Scan:
         s["sessions"].add(sid)
         tool, inp = p.get("name", "?"), st["input"]
         kind, key = classify(tool, inp, role)
+        err = st.get("error")
+        ts.note_call(self.per[sid], tool, inp, st.get("status"), kind, err.get("message") if isinstance(err, dict) else err)
         s["kinds"][kind] += 1
         if kind == "REPLACEABLE":
             s["rules"][key] += 1
@@ -205,9 +175,14 @@ class Scan:
             if not f or not f.is_file():
                 continue
             try:
-                given = [g.lower() for g in json.loads(f.read_text(encoding="utf-8")).get("paths", [])]
+                seen = json.loads(f.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
+            given = [g.lower() for g in seen.get("paths", [])]
+            asks = collections.Counter({k.rsplit("#", 1)[0]: 0 for k in seen.get("asks", {})})
+            for k, n in seen.get("asks", {}).items():
+                asks[k.rsplit("#", 1)[0]] += n
+            self.seeds[sid] = asks.most_common(1)[0][0] if asks else None
             s = self.stat[self.roles[sid]]
             s["mapped"].add(sid)
             for p in paths:
@@ -215,39 +190,18 @@ class Scan:
                 low = p.lower()
                 if not any(low == g or low.endswith("/" + g) for g in given):
                     s["offmap"] += 1
+                    self.offmap_n[sid] += 1
+                    self.off_paths[sid][p] += 1
 
 
 def read_db(scan, path, since, project):
-    if not pathlib.Path(path).is_file():
-        raise SystemExit(f"role-telemetry: no database at {path} (--db)")
-    db = sqlite3.connect(pathlib.Path(path).resolve().as_uri() + "?mode=ro", uri=True, timeout=5)
+    db = role_data.connect(path)
     cols = {r[1] for r in db.execute("pragma table_info(session_v2)")}
     if not {"id", "time_updated"} <= cols:
         raise SystemExit("role-telemetry: no session_v2 table with id and time_updated")
-    pick = ", ".join(c if c in cols else f"null as {c}" for c in ("id", "agent", "title", "directory"))
-    sess = {}
-    for sid, agent, title, directory in db.execute(f"select {pick} from session_v2 where time_updated > ?", (since,)):
-        if project and project.lower() not in (directory or "").lower():
-            continue
-        sess[sid] = [agent, title, None]
-    for sid, data in db.execute("select session_id, data from session_message where type = 'user' and "
-                                "time_created > ? order by session_id, seq", (since,)):
-        if sid in sess and sess[sid][2] is None:
-            try:
-                sess[sid][2] = json.loads(data).get("text") or None
-            except (ValueError, AttributeError):
-                pass
-    missing = {sid for sid, v in sess.items() if v[2] is None}
-    if missing:  # the brief as the session's first text part
-        for sid, data in db.execute("select session_id, data from session_part where type = 'text' and "
-                                    "time_created > ? order by session_id, time_created", (since,)):
-            if sid in missing:
-                try:
-                    sess[sid][2] = json.loads(data).get("text") or ""
-                except (ValueError, AttributeError):
-                    sess[sid][2] = ""
-                missing.discard(sid)
-    scan.roles = {sid: role_of(agent, brief, title) for sid, (agent, title, brief) in sess.items()}
+    scan.meta = role_data.sessions(db, since, project=project, scope=None)  # every project: one place for all spend
+    # this project's session counts for its role; any other as `other`
+    scan.roles = {sid: s["role"] if s["project"] == "this" else s["project"] for sid, s in scan.meta.items()}
     for sid, data in db.execute("select session_id, data from session_part where type = 'tool' and time_created > ?"
                                 " order by session_id, time_created", (since,)):
         if sid in scan.roles:
@@ -255,7 +209,7 @@ def read_db(scan, path, since, project):
                 scan.call(sid, json.loads(data))
             except (ValueError, AttributeError, TypeError):
                 continue
-    db.close()
+    return db
 
 
 def summary(scan):
@@ -271,8 +225,9 @@ def summary(scan):
     return out
 
 
-def flags_of(roles, scan, a, base):
-    """[(key, text, role, rule, n, share)] for this run; `base` is the baseline (None: no --state)."""
+def flags_of(roles, scan, a, base, session_flags=()):
+    """[(key, text, role, rule, n, share)] for this run; `base` is the baseline (None: no --state). A session pattern
+    (`telemetry_sessions.flags`) becomes a role flag in 3+ sessions of that role."""
     flags = []
     for role, o in sorted(roles.items()):
         top3 = list(o["rules"])[:3]
@@ -301,6 +256,13 @@ def flags_of(roles, scan, a, base):
         if defs >= 10 and len(sessions) >= 3:
             flags.append((f"inline:{name}", f"inline helper `{name}` typed {defs} times in {len(sessions)} sessions "
                           f"({', '.join(sorted(rs))}): a missing tool?", ",".join(sorted(rs)), name, defs, 0))
+    by_role = collections.defaultdict(set)
+    for key, _, role, rule, *_ in session_flags:
+        by_role[(role, rule)].add(key.split(":")[1])
+    for (role, rule), sids in sorted(by_role.items()):
+        if len(sids) >= 3 and role not in ("other",):
+            flags.append((f"{rule}:{role}", f"{role}: {len(sids)} sessions with the `{rule}` pattern (Session flags)",
+                          role, rule, len(sids), 0))
     return flags
 
 
@@ -321,6 +283,18 @@ def report(roles, scan, flags, new, label):
     return "\n".join(rows)
 
 
+
+def value_part(a, db, js):
+    """--value: the rating and its tables (role_value.py); --vault writes the rating as `live/Roles.md`."""
+    work = pathlib.Path(a.work) if a.work else default_seen().parents[1]
+    reg = json.loads(pathlib.Path(a.registry).read_text(encoding="utf-8"))
+    vmd, js["value"], rows, stamp = role_value.value_section(
+        db, reg, work, HERE.parents[1], lambda t: role_data.sessions(db, t, project=a.project), role_data.week_start())
+    if a.vault:
+        role_value.vault_note(a.vault, rows, stamp)
+    return vmd
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], allow_abbrev=False)
     ap.add_argument("--db", default=None)
@@ -334,9 +308,16 @@ def main(argv=None):
     ap.add_argument("--flag-share", type=float, default=0.15)
     ap.add_argument("--flag-min", type=int, default=20)
     ap.add_argument("--examples", nargs=2, metavar=("ROLE", "RULE"))
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--candidates", default=None)
+    ap.add_argument("--session", action="append", default=[])
+    ap.add_argument("--value", action="store_true")
+    ap.add_argument("--work", default=None)
+    ap.add_argument("--registry", default=str(HERE / "roles.json"))
+    ap.add_argument("--vault", default=None)
     a = ap.parse_args(argv)
     scan = Scan()
-    read_db(scan, a.db or default_db(), since_ms(a.since), a.project)
+    db = read_db(scan, a.db, since_ms(a.since), a.project)
     if a.examples:
         role, rule = ALIASES.get(a.examples[0], a.examples[0]), a.examples[1]
         got = scan.examples.get((role, rule), [])
@@ -353,19 +334,29 @@ def main(argv=None):
     base = state.get("baseline") if state_path else None
     if state_path and not base:  # the first run is the baseline: no share is flagged against itself
         base = {r: {"share": o["share"], "top3": list(o["rules"])[:3]} for r, o in roles.items()}
-    flags = flags_of(roles, scan, a, base)
+    rows = ts.rows(scan.per, scan.meta, scan.roles, role_data.first_steps(db, list(scan.meta)), scan.offmap_n)
+    sflags = ts.flags(rows)
+    flags = flags_of(roles, scan, a, base, sflags)
     alerted = set(state.get("alerted", []))
     new = {k for k, *_ in flags} - alerted if state_path else {k for k, *_ in flags}
-    if a.json:
-        print(json.dumps({"roles": roles, "flags": [{"key": k, "text": t, "new": k in new} for k, t, *_ in flags]},
-                         indent=1))
-    else:
-        print(report(roles, scan, flags, new, f"since {a.since}"))
+    snew = {k for k, *_ in sflags} - alerted
+    js = {"roles": roles, "flags": [{"key": k, "text": t, "new": k in new} for k, t, *_ in flags],
+          "session_flags": [{"key": k, "text": t, "new": k in snew} for k, t, *_ in sflags], "sessions": rows}
+    md = report(roles, scan, flags, new, f"since {a.since}")
+    shown = sorted(sflags, key=lambda f: (f[0] not in snew, -f[4]))[:30]  # the rest: the JSON's `session_flags`
+    md += f"\n\n## Session flags ({len(sflags)}, {len(snew)} new; the first 30)\n\n" + (
+        "\n".join(f"- {'NEW ' if k in snew else ''}{t}" for k, t, *_ in shown) or "- none")
+    md += "\n\n## Sessions\n\n" + ts.table(rows, set(a.session))
+    md += "\n\n" + ts.project_table(role_data.project_spend(db), js)
+    if a.value:
+        md += "\n\n" + value_part(a, db, js)
+    ts.write_outputs(a.out, a.candidates, md, js, scan.off_paths, scan.seeds, HERE.parents[1])
+    print(json.dumps(js, indent=1, default=str) if a.json else md)
     if state_path:
         for r, o in roles.items():  # a role seen for the first time joins the baseline as it is
             base.setdefault(r, {"share": o["share"], "top3": list(o["rules"])[:3]})
         state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps({"baseline": base, "alerted": sorted(alerted | new),
+        state_path.write_text(json.dumps({"baseline": base, "alerted": sorted(alerted | new | snew),
                                           "at": int(time.time())}, indent=1), encoding="utf-8")
     if a.log and new:
         log = pathlib.Path(a.log)

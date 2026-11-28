@@ -10,6 +10,10 @@ import unittest
 from pathlib import Path
 
 TOOL = Path(__file__).resolve().parents[1] / "role-telemetry.py"
+sys.path.insert(0, str(TOOL.parent))
+import role_data  # noqa: E402
+
+HOME = f"C:/w/{role_data.main_work(TOOL.parents[2]).parent.name}"  # this project's folder (roles.json `projects`)
 
 
 def shell(cmd):
@@ -49,7 +53,7 @@ def build_db(path, sessions, now):
                      "create table session_part (id text, message_id text, session_id text, type text,"
                      " time_created integer, data text);")
     for sid, (agent, title, brief, parts) in sessions.items():
-        db.execute("insert into session_v2 values (?, 'root', ?, ?, 'C:/w/p', ?)", (sid, agent, title, now))
+        db.execute("insert into session_v2 values (?, 'root', ?, ?, ?, ?)", (sid, agent, title, HOME, now))
         db.execute("insert into session_message values (?, ?, 'user', 0, ?, ?)",
                    (f"{sid}-u", sid, now, json.dumps({"text": brief})))
         for i, p in enumerate(parts):
@@ -85,7 +89,7 @@ class RoleTelemetry(unittest.TestCase):
         _, o = self.roles()
         r = o["roles"]
         self.assertEqual(r["product"]["sessions"], 2)          # `product`, and `planner` by its old name
-        self.assertEqual(r["executor"]["sessions"], 1)         # the lane brief
+        self.assertEqual(r["builder"]["sessions"], 1)         # the lane brief
         self.assertEqual(r["architect"]["sessions"], 1)        # the old CTO title tag; a session with no call never counts
         self.assertEqual(r["coordinator"]["sessions"], 1)
         self.assertEqual(r["other"]["sessions"], 1)
@@ -93,7 +97,7 @@ class RoleTelemetry(unittest.TestCase):
 
     def test_classification(self):
         _, o = self.roles()
-        lane, prod = o["roles"]["executor"], o["roles"]["product"]
+        lane, prod = o["roles"]["builder"], o["roles"]["product"]
         self.assertEqual(lane["rules"], {"code-def-grep": 1, "doc-whole-read": 1, "polling": 1})
         self.assertEqual(lane["adhoc"], 1)
         self.assertEqual(prod["rules"], {"docs-grep": 3, "searched-doc-whole": 1})   # a ranged read is fine
@@ -133,16 +137,16 @@ class RoleTelemetry(unittest.TestCase):
         build_db(self.db, more, self.now)
         rc, out = self.run_tool()
         self.assertEqual(rc, 1, out)
-        self.assertIn("| `cut` | 12 | 3 | executor |", out)
-        self.assertIn("NEW inline helper `cut` typed 12 times in 3 sessions (executor): a missing tool?", out)
+        self.assertIn("| `cut` | 12 | 3 | builder |", out)
+        self.assertIn("NEW inline helper `cut` typed 12 times in 3 sessions (builder): a missing tool?", out)
         self.assertIn("NEW librarian: 3 sessions and no tools/ script call at all", out)
 
     def test_offmap_reads_need_the_map(self):
         _, o = self.roles()
-        self.assertEqual(o["roles"]["executor"]["mapped_sessions"], 0)             # it never asked kmap
+        self.assertEqual(o["roles"]["builder"]["mapped_sessions"], 0)             # it never asked kmap
         (self.seen / "s-lane.json").write_text(json.dumps({"paths": ["src/model/minimap.ts"]}), encoding="utf-8")
         _, o = self.roles()
-        lane = o["roles"]["executor"]
+        lane = o["roles"]["builder"]
         self.assertEqual((lane["reads"], lane["offmap"]), (2, 1))                  # start reads never count
 
     def test_examples_and_bad_args(self):

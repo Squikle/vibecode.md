@@ -1,0 +1,733 @@
+{
+  "_doc": "The role registry: one entry per role, the single source of its mode, model, effort, budget, value metric and agent permissions. Edit with `python -I -X utf8 tools/work/roles.py set <role> key=value ...` (it regenerates); `roles.py gen` writes .opencode/agents/<role>.md (its body: `body_common`, then the role's `body` or `helper_block`), tools/work/helper.md (from `helper_block`) and the model line of each listed command; `roles.py check` (tools/work/tests/test_role_registry.py) fails on any drift. A role is in this checkout when one of its `briefs` is (none listed: always); gen and check skip the rest. `model`: the deploy fills it from your answers (`effort`, when set, is added as `#<effort>`). Budgets: $ at list prices (subscription models too); the defaults are the source project's history to 2026-11-27, so set your own after a week (`roles.py show`). `budget_mode` `warn` (until `warn_until`, when set): `may` prints and logs an overspend but exits 0 for budget; `block` exits 1. Spend counts this project's sessions only (`projects`, role_data.project_of). `briefs`: also the files whose required commands every agent must allow (test). `git_deny` holds every banned git subcommand. Value: metrics role-telemetry.py computes; `good` is the direction that counts as good; a metric with too little data rates `unknown`. `git_deny` verbs expand to `*git <v> *`, `*git <v>`, `*git -C * <v> *` and `*git -C * <v>`; `shell_allow` makes the shell an allowlist (deny `*` first).",
+  "budget_mode": "warn",
+  "protect": {
+    "_doc": "Only these roles may change what drives the roles: the agent files, the commands, the registry.",
+    "may_edit": [
+      "builder",
+      "integrator"
+    ],
+    "edit": [
+      ".opencode/*",
+      "*/.opencode/*",
+      "tools/work/roles.json",
+      "*/tools/work/roles.json"
+    ],
+    "shell": [
+      "python*roles.py set",
+      "python*roles.py gen",
+      "*python.exe *roles.py set",
+      "*python.exe *roles.py gen"
+    ]
+  },
+  "projects": {
+    "_doc": "Which project a session is (role_data.project_of), in order: `exclude` by title (an explicit line beats every heuristic: the owner's overrule goes here); `folder` (default: this checkout's main tree name, with or without `-wt`); the parent's project; a brief naming `word` (default: the main tree's folder name) once `preamble` (a spawn line naming the main tree's .work) is cut out; else `other`. Budgets and `may` count `this` only.",
+    "exclude": []
+  },
+  "helper_block": [
+    "## Hand reads to `helper`",
+    "",
+    "`helper` is a session on the small model (`{{M_HELPER}}`) that only reads. Hand it a read when the reading is big and the answer small, and don't be shy about it: it is the cheap way to keep your own context small.",
+    "",
+    "- **Use it for:** multi-file reads or summaries; \"find where X is used\" sweeps; log triage (what failed first); gathering the inventory for `kmap list`.",
+    "- **Not for:** judgment calls, edits, or anything whose answer you would re-check line by line anyway.",
+    "- **How:** the subagent tool, agent `helper`, with a brief that stands alone: the question, the paths, the answer's form (at most 20 lines, a `file:line` per claim, \"not found\" allowed only after a search that ran; a refused call is reported as refused). Read the lines it points at before you build on them.",
+    "",
+    "Per 100k tokens read (list prices of 2026-11-27, `tools/work/model-prices.json`): a small model (Haiku 5.5) $0.01 input ($0.0125 into its cache); a top model (Opus 5.5) $0.50 into its cache, then $0.02 on every later request it stays in your context (Fable 5.2: $1.00, then $0.02).",
+    "",
+    "1. \"Which of these 30 files use `parseConfig`, with file:line?\" (~120k tokens): helper ~$0.02 in all; read by an Opus builder, $0.60 now plus ~$0.024 a request, ~$3 over its next 100 requests.",
+    "2. \"What failed first in this gate log?\" (~100k tokens): helper ~$0.015; read by Opus, $0.50 plus $0.02 a request, ~$2.50 over 100 requests."
+  ],
+  "body_common": [
+    "**A refused call is not an answer.** When a tool call is refused (`Permission denied`) or fails, say so in your answer: never report \"not found\", \"none\" or \"no match\" from it. Try the grep or read tool instead (a search for a word your shell rules refuse, such as `node` or `docker`, goes through the grep tool), or ask the session that sent you.",
+    ""
+  ],
+  "common_deny": [
+    [
+      "skill",
+      "nothing here needs a skill (the list is ~4.9k tokens a request, measured)"
+    ],
+    [
+      "execute",
+      "Code Mode; with it off its tools turn direct, so those go too"
+    ],
+    [
+      "browser",
+      ""
+    ],
+    [
+      "playwright_*",
+      "briefs: never the Playwright MCP browser tools"
+    ],
+    [
+      "serena_*",
+      "lookups are git grep, tools/work/map.py and tools/kmap/kmap.py"
+    ],
+    [
+      "searxng_*",
+      "outside facts come from a role with websearch"
+    ],
+    [
+      "automation*",
+      "jobs are tools/jobs/jobs.py's"
+    ],
+    [
+      "opencode_*",
+      ""
+    ],
+    [
+      "generate_image",
+      ""
+    ],
+    [
+      "generate_video",
+      ""
+    ]
+  ],
+  "unattended": [
+    [
+      "question",
+      "*",
+      "deny",
+      "unattended: never ask, never wait"
+    ],
+    [
+      "read",
+      "*.env",
+      "deny",
+      "the base policy asks here, and nobody answers a spawned session"
+    ],
+    [
+      "read",
+      "*.env.*",
+      "deny",
+      ""
+    ],
+    [
+      "read",
+      "*.env.example",
+      "allow",
+      ""
+    ]
+  ],
+  "shell_note": "Measured live (opencode 2.4.1, PowerShell, 2026-11-28): opencode checks each subcommand of a chain (`|`, `;`, `&&`) alone (`git log | Select-String` was refused under a `git log` allowlist). A cmdlet, alias or script command's resource starts with the command (`npm ci *`, `Set-Content *`, `del *`, `python* -c *` matched); an `.exe` such as git or rg has text before it (`git push *` and `rg *` did not match, `* git push *` and `* rg *` did). So a word in `word_deny`/`shell_allow` expands to `<w> *`, `<w>`, `* <w> *`, `* <w>` (a whole word: `del` no longer hits `storeModel`; it still refuses an argument that is the bare word, e.g. `rg -n del`), a verb in `git_deny`/`git_allow` to those forms of `git <v>` and `git -C <path> <v>`; `shell_deny` keeps operators only.",
+  "roles": {
+    "product": {
+      "mode": "on",
+      "model": "{{M_PRODUCT}}",
+      "when": "the owner's feedback or tasks to groom (xhigh for a first plan)",
+      "budget": {
+        "run": 30,
+        "week": 150
+      },
+      "value": [
+        {
+          "metric": "spec_gap_share",
+          "threshold": 0.22,
+          "good": "down"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "all",
+        "question": true,
+        "subagent": [
+          "pregroomer",
+          "architect",
+          "plan-review",
+          "helper"
+        ],
+        "subagent_why": "PLANNING.md: pre-groomers, the gate, the plan review, helpers",
+        "edit": {
+          "deny": [
+            "src/*",
+            "*/src/*",
+            "py/*",
+            "*/py/*",
+            "tools/*",
+            "*/tools/*"
+          ]
+        },
+        "edit_why": "the product lead never touches code",
+        "description": "The product lead (was: planner) by docs/PLANNING.md: specs and new rows; never code",
+        "shell_deny": [],
+        "websearch": true,
+        "webfetch": true,
+        "body": "helper_block"
+      },
+      "commands": [
+        "product"
+      ],
+      "briefs": [
+        "docs/workflow/product.md",
+        "docs/PLANNING.md"
+      ]
+    },
+    "architect": {
+      "mode": "on",
+      "model": "{{M_ARCH}}",
+      "when": "each planning pass's gate (heavy rows: How to build; light: Fit); sweeps at a clean stage (#xhigh); a design call",
+      "budget": {
+        "run": 40,
+        "week": 150
+      },
+      "value": [
+        {
+          "metric": "spec_gap_share",
+          "threshold": 0.22,
+          "good": "down"
+        },
+        {
+          "metric": "gate_net_usd",
+          "threshold": 0,
+          "good": "up"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "all",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": {
+          "deny": [
+            "src/*",
+            "*/src/*",
+            "py/app/*",
+            "*/py/app/*"
+          ]
+        },
+        "edit_why": "the architect never writes feature code",
+        "description": "The architect (was: CTO) by docs/workflow/architect.md: How to build, Fit, sweeps, refactor rows; never feature code",
+        "shell_deny": [],
+        "websearch": true,
+        "webfetch": true,
+        "body": "helper_block"
+      },
+      "commands": [
+        "architect"
+      ],
+      "briefs": [
+        "docs/workflow/architect.md"
+      ]
+    },
+    "plan-review": {
+      "mode": "on",
+      "model": "{{M_PLANREV}}",
+      "when": "once per planning pass that makes a spec ready, fresh, after the architect's gate",
+      "budget": {
+        "run": 5,
+        "week": 20
+      },
+      "value": [
+        {
+          "metric": "spec_gap_share",
+          "threshold": 0.22,
+          "good": "down"
+        },
+        {
+          "metric": "gate_net_usd",
+          "threshold": 0,
+          "good": "up"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": {
+          "only": [
+            ".work/plan/*",
+            "*/.work/plan/*"
+          ]
+        },
+        "edit_why": "plan-review.md: never edit specs, rows or code",
+        "description": "Reviews one planning pass by docs/workflow/plan-review.md, fresh per pass; findings only",
+        "shell_deny": [],
+        "websearch": false,
+        "webfetch": true,
+        "body": "helper_block",
+        "git_deny": [
+          "push",
+          "merge",
+          "reset",
+          "commit"
+        ],
+        "git_why": "plan-review.md: findings only, never a commit of its own"
+      },
+      "commands": [
+        "plan-review"
+      ],
+      "briefs": [
+        "docs/workflow/plan-review.md"
+      ]
+    },
+    "pregroomer": {
+      "mode": "on-request",
+      "model": "{{M_PREGROOM}}",
+      "when": "one per heavy task, the owner's pick in the product lead's one question per pass",
+      "budget": {
+        "run": 6,
+        "week": 60
+      },
+      "value": [
+        {
+          "metric": "spec_gap_share_groomed",
+          "threshold": 0.22,
+          "good": "down"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": {
+          "only": [
+            ".work/groom/*",
+            "*/.work/groom/*"
+          ]
+        },
+        "edit_why": "pregroomer.md: never a tracked file",
+        "description": "Pre-grooms one task for the product lead by docs/workflow/pregroomer.md",
+        "shell_deny": [],
+        "websearch": false,
+        "webfetch": true,
+        "body": "helper_block",
+        "git_deny": [
+          "push",
+          "merge",
+          "reset",
+          "commit"
+        ],
+        "git_why": "pregroomer.md: never a tracked file"
+      },
+      "commands": [
+        "pregroom"
+      ],
+      "briefs": [
+        "docs/workflow/pregroomer.md"
+      ]
+    },
+    "librarian": {
+      "mode": "on",
+      "model": "{{M_DOCS}}",
+      "when": "a clean stage after the architect, or a doc over its budget",
+      "budget": {
+        "run": 15,
+        "week": 40
+      },
+      "value": [
+        {
+          "metric": "doc_kb_cut_per_usd",
+          "threshold": 2,
+          "good": "up"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": {
+          "only": [
+            "*.md"
+          ]
+        },
+        "edit_why": "librarian.md: never code, tests, scripts or config",
+        "description": "Keeps the docs true and short by docs/workflow/librarian.md; docs only",
+        "shell_deny": [],
+        "websearch": true,
+        "webfetch": true,
+        "body": "helper_block"
+      },
+      "commands": [
+        "librarian"
+      ],
+      "briefs": [
+        "docs/workflow/librarian.md"
+      ]
+    },
+    "helper": {
+      "mode": "on",
+      "model": "{{M_HELPER}}",
+      "when": "a read, a lookup or a summary for another session (/ask)",
+      "budget": {
+        "run": 0.5,
+        "week": 5
+      },
+      "value": [
+        {
+          "metric": "usd_per_run",
+          "threshold": 0.25,
+          "good": "down"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [],
+        "edit": "none",
+        "edit_why": "a helper only reads",
+        "description": "A read, a lookup or a summary for another session (/ask); reads only",
+        "shell_deny": [
+          [
+            "* > *",
+            "a helper only reads: no redirect"
+          ],
+          [
+            "*>>*",
+            ""
+          ]
+        ],
+        "shell_allow": [
+          "rg",
+          "grep",
+          "Get-Content",
+          "cat",
+          "head",
+          "tail",
+          "Select-String",
+          "Get-ChildItem",
+          "ls",
+          "python*tools?kmap?kmap.py",
+          "python*tools?work?map.py",
+          "python*tools?work?find.py"
+        ],
+        "git_deny": [
+          "push",
+          "merge",
+          "reset",
+          "checkout",
+          "commit",
+          "clean",
+          "stash",
+          "rebase",
+          "restore",
+          "switch",
+          "branch -D",
+          "branch -d",
+          "worktree",
+          "tag -d",
+          "update-ref",
+          "add",
+          "rm",
+          "mv",
+          "cherry-pick",
+          "revert",
+          "am",
+          "apply",
+          "pull",
+          "fetch",
+          "config"
+        ],
+        "body": [
+          "You answer one read-only question for another session (/ask): read what it names, then answer in at most 20 lines with a `file:line` per claim. \"Not found\" is an answer only after a search that ran; a refused or failed call is reported as refused. Search for a word your shell rules refuse (`node`, `docker`, `cmd`, `ssh`, `sh` ...) with the grep tool. You change nothing."
+        ],
+        "websearch": false,
+        "webfetch": true,
+        "git_allow": [
+          "log",
+          "show",
+          "grep",
+          "diff",
+          "status",
+          "blame",
+          "ls-files",
+          "rev-parse",
+          "branch --list"
+        ],
+        "word_deny": [
+          [
+            "Set-Content",
+            "a helper only reads: no write, move or other tool (each subcommand of a chain is checked alone)"
+          ],
+          [
+            "Add-Content",
+            ""
+          ],
+          [
+            "Out-File",
+            ""
+          ],
+          [
+            "Tee-Object",
+            ""
+          ],
+          [
+            "Remove-Item",
+            ""
+          ],
+          [
+            "Move-Item",
+            ""
+          ],
+          [
+            "Copy-Item",
+            ""
+          ],
+          [
+            "New-Item",
+            ""
+          ],
+          [
+            "Rename-Item",
+            ""
+          ],
+          [
+            "Set-Item",
+            ""
+          ],
+          [
+            "Clear-Content",
+            ""
+          ],
+          [
+            "npm",
+            ""
+          ],
+          [
+            "npx",
+            ""
+          ],
+          [
+            "node",
+            ""
+          ],
+          [
+            "docker",
+            ""
+          ],
+          [
+            "Start-Process",
+            ""
+          ],
+          [
+            "Invoke-Expression",
+            ""
+          ],
+          [
+            "iex",
+            ""
+          ],
+          [
+            "Invoke-WebRequest",
+            ""
+          ],
+          [
+            "curl",
+            ""
+          ],
+          [
+            "pwsh",
+            ""
+          ],
+          [
+            "powershell",
+            ""
+          ],
+          [
+            "cmd",
+            ""
+          ],
+          [
+            "sh",
+            ""
+          ],
+          [
+            "bash",
+            ""
+          ],
+          [
+            "python* -c",
+            ""
+          ],
+          [
+            "ssh",
+            ""
+          ],
+          [
+            "rm",
+            ""
+          ],
+          [
+            "del",
+            ""
+          ]
+        ]
+      },
+      "commands": [
+        "ask"
+      ],
+      "briefs": []
+    },
+    "coordinator": {
+      "mode": "on",
+      "model": "{{M_COORD}}",
+      "when": "the owner's entry point; runs `roles.py may <role>` before every spawn",
+      "budget": {
+        "run": 60,
+        "week": 150
+      },
+      "value": [
+        {
+          "metric": "coord_usd_per_merged_batch",
+          "threshold": 10,
+          "good": "down"
+        }
+      ],
+      "agent": {
+        "file": false,
+        "why": "the owner's own session, on the model they pick; it needs every tool"
+      },
+      "commands": [
+        "coordinator"
+      ],
+      "briefs": [
+        "docs/workflow/coordinator.md"
+      ]
+    },
+    "builder": {
+      "mode": "on",
+      "model": "{{M_EXEC}}",
+      "when": "a ready row: a lane the coordinator spawns",
+      "budget": {
+        "run": 15,
+        "week": 1200
+      },
+      "value": [
+        {
+          "metric": "rounds_to_green",
+          "threshold": 1.5,
+          "good": "down"
+        },
+        {
+          "metric": "usd_per_merged_batch",
+          "threshold": 40,
+          "good": "down"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": "any",
+        "description": "A builder lane: one batch at a time in its own worktree, by docs/workflow/lane-brief.md, unattended",
+        "subagent_why": "lane-brief: no subagents of your own but helper",
+        "shell_deny": [],
+        "git_deny": [
+          "push",
+          "pull",
+          "config",
+          "worktree remove",
+          "checkout main",
+          "switch main",
+          "clean -*x*"
+        ],
+        "git_why": "lane-brief: never pull, push, change git config or check out main; never git clean -x",
+        "websearch": false,
+        "webfetch": true,
+        "body": "helper_block",
+        "word_deny": []
+      },
+      "commands": [],
+      "briefs": [
+        "docs/workflow/lane-brief.md"
+      ]
+    },
+    "reviewer": {
+      "mode": "on",
+      "model": "{{M_REVIEW}}",
+      "when": "a lane's light-GREEN line or READY: one fresh reviewer per round",
+      "budget": {
+        "run": 3,
+        "week": 400
+      },
+      "value": [
+        {
+          "metric": "majors_per_changes_round",
+          "threshold": 1.0,
+          "good": "up"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": "any",
+        "description": "Reviews one batch by docs/workflow/reviewer-brief.md, fresh per review",
+        "shell_deny": [],
+        "git_deny": [
+          "push",
+          "reset",
+          "worktree remove"
+        ],
+        "git_why": "reviewer-brief: never push; a review never resets or removes a worktree",
+        "websearch": false,
+        "webfetch": true,
+        "body": "helper_block",
+        "word_deny": []
+      },
+      "commands": [
+        "reviewer"
+      ],
+      "briefs": [
+        "docs/workflow/reviewer-brief.md"
+      ]
+    },
+    "integrator": {
+      "mode": "on",
+      "model": "{{M_INTEG}}",
+      "when": "READY branches to merge; a model only on a conflict, NEW-RED, FAIL or ERROR twice",
+      "budget": {
+        "run": 5,
+        "week": 100
+      },
+      "value": [
+        {
+          "metric": "usd_per_merge",
+          "threshold": 5,
+          "good": "down"
+        }
+      ],
+      "agent": {
+        "file": true,
+        "mode": "subagent",
+        "question": false,
+        "subagent": [
+          "helper"
+        ],
+        "edit": "any",
+        "description": "Merges READY branches into local main by docs/workflow/integrator-brief.md",
+        "shell_deny": [],
+        "websearch": false,
+        "webfetch": true,
+        "body": "helper_block",
+        "git_deny": [
+          "worktree remove"
+        ],
+        "git_why": "integrator-brief: the integrator never removes a worktree",
+        "word_deny": []
+      },
+      "commands": [],
+      "briefs": [
+        "docs/workflow/integrator-brief.md"
+      ]
+    }
+  }
+}

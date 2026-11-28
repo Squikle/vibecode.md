@@ -41,4 +41,6 @@ Per role: raw commands a project tool covers (each with its tool), inline helper
 
 **Measured, not blocked:** a spawned session never gets an `ask` rule (nobody answers it, the lane stalls). Off-map reads are good news when the merge used the file (a missing link: fix the map, `kmap.py miss`) and a brief problem when it didn't.
 
+**Per session and per role's worth:** `--out` keeps each session's project and $ (list prices when the database has no cost; a per-project table), first request, kmap calls against raw lookups, big whole reads and error loops; such a pattern is a session flag, a role flag in 3+ sessions. `--value` rates each role of `tools/work/roles.json` against its budget and value metric (`unknown` on thin data); `tools/jobs/jobs.py` runs it every 4 h.
+
 **One fix a week:** from the Monday digest, pick the (role, rule) pair with the most calls; log it with its numbers before and after.

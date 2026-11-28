@@ -1,0 +1,30 @@
+{
+  "_doc": "List prices in $ per million tokens, from `opencode api model.list` (provider anthropic) on 2026-11-27. tools/coordinate/role_data.py prices a session with them when the database has no cost (subscription `claude-agent/*`), so such a session is never $0. Reasoning tokens bill as output (checked on the 7 paid anthropic lanes in the database: exact). `aliases`: a claude-agent model id -> the anthropic id it runs (opus/sonnet/haiku: the newest of each on that date, UNVERIFIED; fable is pinned in the global config). `local`: providers that cost nothing. Refresh: `python -I -X utf8 tools/coordinate/role_data.py prices` prints today's list next to this file's.",
+  "as_of": "2026-11-27",
+  "local": ["local", "ollama", "llama.cpp", "lmstudio"],
+  "aliases": {
+    "opus": "claude-opus-5-5",
+    "opus-lane": "claude-opus-5-5",
+    "sonnet": "claude-sonnet-5-5",
+    "sonnet-lane": "claude-sonnet-5-5",
+    "haiku": "claude-haiku-5-5",
+    "fable": "claude-fable-5-2"
+  },
+  "models": {
+    "claude-fable-5-2": [{"input": 8, "output": 40, "read": 0.2, "write": 10}],
+    "claude-fable-5-1": [{"input": 10, "output": 50, "read": 0.25, "write": 12.5}],
+    "claude-fable-5": [{"input": 10, "output": 50, "read": 1, "write": 12.5}],
+    "claude-opus-5-5": [{"input": 4, "output": 20, "read": 0.2, "write": 5}],
+    "claude-opus-5": [{"input": 5, "output": 25, "read": 0.5, "write": 6.25}],
+    "claude-opus-4-8": [{"input": 5, "output": 25, "read": 0.5, "write": 6.25}],
+    "claude-opus-4-7": [{"input": 5, "output": 25, "read": 0.5, "write": 6.25}],
+    "claude-opus-4-6": [{"input": 5, "output": 25, "read": 0.5, "write": 6.25}],
+    "claude-sonnet-5-5": [{"input": 2, "output": 10, "read": 0.1, "write": 2.5}],
+    "claude-sonnet-5": [{"input": 2, "output": 10, "read": 0.2, "write": 2.5}],
+    "claude-sonnet-4-6": [{"input": 3, "output": 15, "read": 0.3, "write": 3.75}],
+    "claude-haiku-5-5": [{"input": 0.1, "output": 0.5, "read": 0.01, "write": 0.125},
+                         {"over": 100000, "input": 0.5, "output": 2.5, "read": 0.05, "write": 0.625}],
+    "claude-haiku-4-5": [{"input": 1, "output": 5, "read": 0.1, "write": 1.25}],
+    "claude-haiku-4-5-20251001": [{"input": 1, "output": 5, "read": 0.1, "write": 1.25}]
+  }
+}
