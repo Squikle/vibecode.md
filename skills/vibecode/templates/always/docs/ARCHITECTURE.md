@@ -1,6 +1,6 @@
 # Architecture: the code map and its rules
 
-The planner writes the first cut; every batch keeps the map true in the same commit as its change. The architecture test checks that every source file has its line here.
+The product lead writes the first cut, the architect owns it from then on; every batch keeps the map true in the same commit as its change. The architecture test checks that every source file has its line here.
 
 ## Stack
 

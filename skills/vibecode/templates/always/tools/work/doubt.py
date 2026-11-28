@@ -11,7 +11,7 @@ Usage: python -I -X utf8 tools/work/doubt.py [--repo .] [--db <opencode.db>] [--
   `--repo` tracks (`git ls-files`; default the git root of the current folder; no git: its files) by the longest
   tail, so a worktree's or a clone's path counts for the same file and another project's file for none.
   Only lanes count: a session whose user text, reads or shell commands match `--lane` (default: it reads or is
-  told about lane-brief). An integrator, a planner or a reviewer reads code and docs as its job; `--roles` counts
+  told about lane-brief). An integrator, a product lead or a reviewer reads code and docs as its job; `--roles` counts
   every session anyway.
 
 Two signals per code file:
@@ -26,7 +26,7 @@ A lane's own task is no doubt: a lookup is dropped (and counted in the header) w
 session edits or writes (its diff) or one its brief names (any user message: the path, or a file name unique in the
 repo), or when the doc looked up is one the brief names. A doubt line counts even on the lane's own file.
 
-A file seen in `--promote` sessions or more is PROMOTE: a patch-or-rework look by the CTO, never straight to a lane.
+A file seen in `--promote` sessions or more is PROMOTE: a patch-or-rework look by the architect, never straight to a lane.
 `--state <file>` remembers promoted files (JSON); each alerts once, as NEW. Exit 1 when a NEW promote is in the
 report (no `--state`: any promote), else 0. It prints a markdown report and writes nothing but `--state`.
 """
@@ -210,7 +210,7 @@ class Scan:
                                        "ranges": collections.Counter(), "why": "", "how": ""})
         for sid, s in self.by_sid.items():
             self.lanes += s.lane
-            if not (s.lane or self.roles):  # an integrator, a planner, a reviewer reads code and docs as its job
+            if not (s.lane or self.roles):  # an integrator, a product lead, a reviewer reads code and docs as its job
                 continue
             brief = "\n".join(s.brief).replace("\\", "/").lower()
             def named(f):

@@ -1,13 +1,13 @@
 ---
 name: vibecode
-description: Set up a new project folder for agent-built development (coordinator as entry point, planner with pre-groomers, CTO, librarian, executors, reviewers, integrator; parallel tests with locks; optional second machine). Only when the user runs /vibecode or names the skill.
+description: Set up a new project folder for agent-built development (coordinator as entry point and owner of the order, product lead with pre-groomers, architect, plan reviewer, librarian, executors, reviewers, integrator; a no-model knowledge map; parallel tests with locks; optional second machine). Only when the user runs /vibecode or names the skill.
 metadata:
   opencode/autoinvoke: false
 ---
 
 # vibecode: deploy the multi-agent build workflow into this folder
 
-The user made an empty (or young) folder, opened opencode there and ran `/vibecode [idea]`. You interview them briefly, deploy the workflow's docs, briefs and scripts with one script, and hand them the first prompts. **You do not plan the product and you write no product code:** the planner session does that, started from your prompt.
+The user made an empty (or young) folder, opened opencode there and ran `/vibecode [idea]`. You interview them briefly, deploy the workflow's docs, briefs and scripts with one script, and hand them the first prompts. **You do not plan the product and you write no product code:** the product lead's session does that, started from your prompt.
 
 Keep your own context small: never read the files under `templates/`; `scripts/deploy.py` copies and fills them. Paths below are relative to this skill's base directory (`skill://vibecode`, given when it loads; on disk `~/.config/opencode/skills/vibecode`).
 
@@ -19,7 +19,7 @@ Keep your own context small: never read the files under `templates/`; `scripts/d
 ## 2. The idea
 
 - The command's arguments are the idea. If they are empty, ask in plain text: **"What are we building? 2 to 5 sentences: what it does, for whom, why it's worth it."** Then stop and wait.
-- Don't refine the idea here; the planner interviews them properly.
+- Don't refine the idea here; the product lead interviews them properly.
 
 ## 3. The interview: ONE question-tool call, these five questions
 
@@ -47,11 +47,13 @@ Look up the exact model IDs and variants available to them (opencode: the `model
 
 | Role | Model | Effort | Why |
 |---|---|---|---|
-| Planner | top (the model they like best for design) | high (xhigh for the first plan) | design and order are the expensive mistakes; takes a queue of jobs, retires at ~250k context |
+| Product lead (`M_PRODUCT`) | top, or a premium model above it (see below) | high (xhigh for the first plan) | what to build and why are the expensive mistakes; takes a queue of jobs, retires at ~140k context |
 | Pre-groomer (one per heavy task) | top | high | digs into one task with a small, fresh context |
-| CTO (main code lead) | top | high (xhigh for a health sweep) | architecture, how heavy batches are built, refactor rows; retires at ~250k context |
+| Architect, a pass's gate and sweeps (`M_ARCH`) | top, or the premium model (see below) | high (xhigh for a health sweep) | architecture, `How to build` and `Fit:` lines, refactor rows; retires at ~140k context |
+| Architect, a single design call (`M_ARCH_QUICK`) | top | high | one question from a builder or reviewer; also the librarian's heavy jobs |
+| Plan reviewer (`M_PLANREV`) | top, a different model than the product lead's when you can | high | fresh, read-only, once per planning pass: the plan against the owner's words; a different model catches other blind spots |
 | Librarian (docs only) | mid (top for a heavy job, such as rebuilding the docs vault) | high | contradictions, compaction, doc budgets; the coordinator picks the tier per job |
-| Coordinator (entry point) | mid (top over 4 lanes) | medium | routing, slots, status, the merges; product calls go to the planner, technical ones to the CTO |
+| Coordinator (entry point) | mid (top over 4 lanes) | medium | routing, the backlog's order, slots, status, the merges; product calls go to the product lead, technical ones to the architect |
 | Executor, well-defined batch | top | medium | spec says what; tests say done |
 | Executor, design / perf / unclear / camera-like | top | high | needs thinking; set per batch |
 | Reviewer (code) | top | high | must criticise; a weak reviewer waves things through; also fixes its own notes and runs the gate |
@@ -60,9 +62,11 @@ Look up the exact model IDs and variants available to them (opencode: the `model
 | Read helper (large read, small answer) | small | low | saves the caller's context |
 | Builder (solo) | top | high | builds and judges alone |
 
+**A premium model above top** (priced over the top model; measured on real sessions it cost ~1.6x the top model, not its 2x list price, because cached reads cost the same): offer it only for the product lead and the architect's gate and sweeps, the two roles whose mistakes get built, reviewed and merged; every spawn on it needs the owner's word (the coordinator asks). Otherwise use top there too.
+
 Write the IDs as `provider/model#variant` (opencode's format for agents, commands and `opencode run -m`). Under a usage cap keep it at most 3 executors and say that every machine shares one cap; after the cap's reset the owner types `continue` and the coordinator resumes each session from its progress file.
 
-**Compaction (advise it in your answer; never edit their opencode config unasked).** Role sessions retire instead of compacting, but a long lane compacts, and early is cheaper:
+**Compaction (advise it in your answer; never edit their opencode config unasked).** Role sessions retire instead of compacting (the product lead and the architect at ~140k, before the ~150k their model alias compacts at: measured, a 250k retire line never fired and those sessions compacted 5-34 times), but a long lane compacts, and early is cheaper:
 - **A lane-only alias per model** in the provider's `models`: `"<model>-lane": { "modelID": "<model>", "limit": { "context": <its window>, "input": 171500 } }`. Auto-compaction fires at `input` minus `compaction.buffer`, so with `"buffer": "30%"` that is ~120k. The coordinator spawns executors, reviewers and integrators on `<provider>/<model>-lane#<variant>`; the owner's own sessions keep the plain model.
 - **`"compaction": { "auto": true, "buffer": "30%", "keep": { "tokens": 4000 } }`.** opencode counts the kept tail at chars/4, Claude's tokenizer runs ~2.4 chars/token and the cut snaps back to the last user message: `keep` 6000 kept 13-18k real tokens; 4000 keeps ~7k.
 - Measured by replaying one long coordinator session: auto-compaction at ~70k with `keep` 4000 cut its lifetime cache reads by 38% against compacting by hand at ~120k. **The trade-off:** earlier compaction summarizes more often, so detail is lost sooner. Default to ~120k for long lanes and the coordinator; ~70k only where a session is cheap or short-lived (small-model chats). The vibecode repo's `OPTIMIZATIONS.md` has the numbers.
@@ -76,8 +80,8 @@ Write the IDs as `provider/model#variant` (opencode's format for agents, command
     "TESTS": "e2e|unit|perf", "USAGE": "cap|tokens|local",
     "LOCAL_MACHINE": "<one line from the probe>", "LOCAL_OS": "windows|macos|linux",
     "REMOTE": false, "REMOTE_HOST": "", "REMOTE_PATH": "", "REMOTE_OS": "", "REMOTE_MACHINE": "",
-    "M_PLANNER": "", "M_COORD": "", "M_EXEC": "", "M_EXEC_HARD": "", "M_REVIEW": "", "M_REVIEW_DELTA": "<the mid model>", "M_INTEG": "", "M_HELPER": "", "M_BUILDER": "",
-    "M_PREGROOM": "", "M_CTO": "", "M_DOCS": "",
+    "M_PRODUCT": "", "M_COORD": "", "M_EXEC": "", "M_EXEC_HARD": "", "M_REVIEW": "", "M_REVIEW_DELTA": "<the mid model>", "M_INTEG": "", "M_HELPER": "", "M_BUILDER": "",
+    "M_PREGROOM": "", "M_ARCH": "", "M_ARCH_QUICK": "", "M_PLANREV": "", "M_DOCS": "",
     "NOTES": "<executor count reasoning, missing tools>"}
    ```
 2. Run `python -I -X utf8 <skill base>/scripts/deploy.py <target> <target>/.work/vibecode-answers.json`. It prints the created and skipped files, then the prompts.
@@ -87,7 +91,7 @@ Write the IDs as `provider/model#variant` (opencode's format for agents, command
 
 - **TL;DR** (2 lines): what was set up, the next step.
 - A table of the sessions: role, model#effort, when it starts.
-- **The planner prompt** in a code block: the one thing to paste now, into a new opencode session on the planner's model. Then the coordinator prompt (or, for solo, the builder prompt), to paste after the planner says the first batches are ready. Both are printed by `deploy.py` and kept in `docs/PROMPTS.md`.
+- **The product lead's prompt** in a code block: the one thing to paste now, into a new opencode session on its model. Then the coordinator prompt (or, for solo, the builder prompt), to paste after the product lead says the first batches are ready. Both are printed by `deploy.py` and kept in `docs/PROMPTS.md`.
 - The compaction advice (section 5) in 2-3 lines, with the alias names for their models.
 - Missing tools from the probe, and anything not verified, as ⚠️ lines.
 - One line on the opt-in kit for their own OpenCode (prompt-polish, ctxpick, the pacer, the compaction snippet): `python -I -X utf8 <skill base>/scripts/deploy.py --global`. Never run it for them unasked. If they have an app to keep running, one more: autodeploy is `"autodeploy": true` in `.work/ci/machine.json` (`tools/ci/README.md`).

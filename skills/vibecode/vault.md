@@ -37,8 +37,8 @@ one (the source project had ~490 of them).
 | File | Written by | Append-only? | In the vault |
 |---|---|---|---|
 | `docs/MERGES.md` | `tools/work/merge-log.py`, at each merge | ✅ | `merges/` notes; batch status `merged` |
-| `docs/DECISIONS.md` | the planner, the CTO | ✅ numbered; the librarian cuts a replaced one to a pointer | `decisions/` notes |
-| `docs/BACKLOG.md`, `docs/QUESTIONS.md` | the planner; anyone (questions) | ❌ tables kept current | `batches/`, `questions/` notes |
+| `docs/DECISIONS.md` | the product lead, the architect | ✅ numbered; the librarian cuts a replaced one to a pointer | `decisions/` notes |
+| `docs/BACKLOG.md`, `docs/QUESTIONS.md` | the product lead and the coordinator (order); anyone (questions) | ❌ tables kept current | `batches/`, `questions/` notes |
 | `docs/HANDOVER.md` | the sessions that build; the librarian trims it | ❌ the state, not the story; capped at 30 KB | mirrored under `docs/` |
 | `.work/coordinator-log.md` (the ledger) | the coordinator: each spawn, verdict, merge, call | ✅ | `log/coordinator-log/` |
 | `.work/log/gate.md` | `tools/ci/gate.py run`: a `GATE` line per run, `RED` / `FLAKY` per new red or flaky test | ✅ | `log/gate/`; views "Reds by test", "Flaky by test" |
@@ -67,7 +67,7 @@ you make yourself is never touched.
 
 ## A project whose events are not merges
 
-Research, writing, ops, data, personal planning: the coordinator (solo: the planner) notices, and once the owner's
+Research, writing, ops, data, personal planning: the coordinator (solo: the product lead) notices, and once the owner's
 needs are clear proposes ONE log: its file, its TYPE words, the keys each carries, who appends, and the views that
 answer the owner's questions. Two examples (in the vault README):
 

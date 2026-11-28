@@ -2,7 +2,7 @@
 
 | Machine | What | Role | Test workers |
 |---|---|---|---|
-| A (this one) | {{LOCAL_MACHINE}} | planner, coordinator, executors, integrator<!-- if:perf -->, the reference for performance budgets<!-- endif --> | cores − 2 |
+| A (this one) | {{LOCAL_MACHINE}} | product lead, coordinator, executors, integrator<!-- if:perf -->, the reference for performance budgets<!-- endif --> | cores − 2 |
 <!-- if:remote -->| B (`{{REMOTE_HOST}}`) | {{REMOTE_MACHINE}} ({{REMOTE_OS}}), repo at `{{REMOTE_PATH}}` | e2e runs for A's builders; builder lanes | cores − 2 |
 <!-- endif -->
 
@@ -23,5 +23,5 @@ Notes from the setup: {{NOTES}}
 
 **Keeping B current:** `git push {{REMOTE_HOST}}:{{REMOTE_PATH}} origin/main:refs/remotes/origin/main` after each merge; B's lanes read specs with `git show origin/main:docs/specs/<id>.md`. Branches come back with `git fetch {{REMOTE_HOST}}:{{REMOTE_PATH}} <b>:<b>`.
 
-**Builder lanes on B** run as `opencode run --auto -m <provider/model#variant> --title <lane> "<prompt>"` in a worktree there, logging to `/tmp/lane-<name>.log`, and report to `{{REMOTE_PATH}}/.work/status.md` (`docs/workflow/remote-brief.md`). They use the same account as A: one usage cap for all.
+**Builder lanes on B** run as `opencode run --auto -m <provider/model#variant> --title <lane> "<prompt>"` in a worktree there, logging to `/tmp/lane-<name>.log`, and report to `{{REMOTE_PATH}}/.work/status.md` (`docs/workflow/remote-brief.md`). They use the same account as A: one usage cap for all. The coordinator's prompt for one: "You are lane <name> of {{PROJECT}} on machine B. Read {{REMOTE_PATH}}/docs/workflow/remote-brief.md. Worktree <path>. Queue: <ids>, each up to READY FOR REVIEW. Then `LANE <name> PAUSED for review` and end." It can't be messaged mid-run; its reviewer works in its worktree on B; only a real major goes back: copy the review files to `{{REMOTE_PATH}}/.work/<id>/`, start it again with the findings. Push `origin/main` to B before a lane needs new specs.
 <!-- endif -->

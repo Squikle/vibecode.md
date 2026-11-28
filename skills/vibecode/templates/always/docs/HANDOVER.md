@@ -30,10 +30,10 @@
 
 ### How to build
 
-- **The spec's `## How to build`** (the CTO's) wins; deviate only with a line in the report.
+- **The spec's `## How to build`** (the architect's) wins; deviate only with a line in the report.
 - **The smallest complete change.** Take the first that fully works: not needed at all (say so in one line) → already in this codebase (reuse it the way the code around it does) → the platform or an installed dependency → one line a reader gets at a glance → the least new code. Finish every caller, test and fixture it touches. Deletion beats addition.
 - **Rules live in the domain:** a product rule is a plain function in the domain modules `docs/ARCHITECTURE.md` names, in the product's words; UI, routes and IO call it.
-- **No speculative structure (YAGNI, KISS).** No option, wrapper, layer or seam for a case that does not exist; a new seam for the second case of a kind is the CTO's call. Merge near-copies at the third copy (DRY), never by coupling things that change for different reasons.
+- **No speculative structure (YAGNI, KISS).** No option, wrapper, layer or seam for a case that does not exist; a new seam for the second case of a kind is the architect's call. Merge near-copies at the third copy (DRY), never by coupling things that change for different reasons.
 - **A bug fix fixes the cause:** reproduce it first, find every caller of what you change, fix it once in the shared code.
 - **Errors and logs:** nothing swallowed; at a boundary fail with a message the user can act on, and log once there with the ids; never in a hot loop.
 - **Trust boundaries:** validate what comes from files, users, agents and URLs; no shell strings built from input; paths stay inside their root.

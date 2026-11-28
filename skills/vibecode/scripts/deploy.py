@@ -96,9 +96,15 @@ flags = {
     "windows": a.get("LOCAL_OS") == "windows",
     "vault": vault,
 }
-# Older answer files lack the newer roles: fall back to the reviewer's (top, high) or the integrator's model.
-for k, fallback in (("M_CTO", "M_REVIEW"), ("M_PREGROOM", "M_REVIEW"), ("M_DOCS", "M_INTEG")):
-    a.setdefault(k, a.get(fallback) or a.get("M_BUILDER", ""))
+# Older answer files name two roles by their old names (planner -> product lead, CTO -> architect) or lack the newer
+# roles: fall back to the old key, then to the reviewer's model (top, high) or the integrator's.
+for new, old in (("M_PRODUCT", "M_PLANNER"), ("M_ARCH", "M_CTO")):
+    if not a.get(new) and a.get(old):
+        a[new] = a[old]
+for k, fallback in (("M_PRODUCT", "M_REVIEW"), ("M_ARCH", "M_REVIEW"), ("M_ARCH_QUICK", "M_REVIEW"),
+                    ("M_PLANREV", "M_REVIEW"), ("M_PREGROOM", "M_REVIEW"), ("M_DOCS", "M_INTEG")):
+    if not a.get(k):
+        a[k] = a.get(fallback) or a.get("M_ARCH") or a.get("M_BUILDER", "")
 a.setdefault("M_REVIEW_DELTA", a.get("M_INTEG") or a.get("M_REVIEW", ""))  # a delta review of docs or tools only: the mid model
 a.setdefault("REVIEW_STEP", {"all": "every batch", "risky": "batches marked `Review: yes` in their spec", "none": "no batch"}[rev])
 

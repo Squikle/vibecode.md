@@ -15,9 +15,10 @@
         // models' math is untouched. With a 1M window and no limit.input, it compacted at 700k.
         "M_EXEC": { "limit": { "context": 1000000, "input": 171500 } },     // ~120k: long builder and coordinator chats
         "M_INTEG": { "limit": { "context": 1000000, "input": 100000 } },    // ~70k: short sessions on a cheaper model
-        // The planner rereads its start docs (~23k tokens) after each compaction: at ~70k it compacted in a loop.
-        // Keep it at ~150k or more.
-        "M_PLANNER": { "limit": { "context": 1000000, "input": 214286 } },  // ~150k
+        // The product lead rereads its start docs after each compaction: at ~70k it compacted in a loop. ~150k here,
+        // and the role retires at ~140k, before it (measured: with the old "retire at 250k" it compacted 5-34
+        // times a session instead). For a wider view raise input to ~357000 (compacts at ~250k) and retire there.
+        "M_PRODUCT": { "limit": { "context": 1000000, "input": 214286 } },  // ~150k
 
         // Lane aliases: the same model under its own name, so a lane gets its own limit (variants are inherited).
         // Spawn lanes as <provider>/M_EXEC-lane#<variant>.

@@ -22,18 +22,19 @@ How to reply to them:
 
 | Role | Reads at start | Writes | Never |
 |---|---|---|---|
-| **Planner** | `docs/PLANNING.md` | vision, specs, the backlog's order, decisions on direction | code |
-| **Pre-groomer** (one task, for the planner) | `docs/workflow/pregroomer.md` | `.work/groom/<id>.md` | tracked files |
-| **CTO** (main code lead) | `docs/workflow/cto.md` | the architecture's rules, a spec's `## How to build`, refactor rows | feature code, product calls |
+| **Product lead** | `docs/workflow/product.md` | vision, specs, new rows, decisions on direction | code, moving rows |
+| **Pre-groomer** (one task) | `docs/workflow/pregroomer.md` | `.work/groom/<id>.md` | tracked files |
+| **Architect** | `docs/workflow/architect.md` | the architecture's rules, `## How to build` and `Fit:`, refactor rows | feature code, product calls |
+| **Plan reviewer** (per pass) | `docs/workflow/plan-review.md` | `.work/plan/<pass>/plan-review.md` | tracked files |
 | **Librarian** | `docs/workflow/librarian.md` | docs only: contradictions, compaction, budgets | code, spec requirements |
-<!-- if:team -->| **Coordinator** (the owner's entry point) | `docs/workflow/coordinator.md` | its log; routes the owner's words, runs the lanes, merges reviewed batches | code, specs |
+<!-- if:team -->| **Coordinator** (the owner's entry point) | `docs/workflow/coordinator.md` | its log; routes the owner's words, owns the backlog's order, runs the lanes, merges | code, specs |
 | **Executor** | `docs/workflow/lane-brief.md` | code, tests, docs of its batch | `main`, another batch's tree |
 | **Integrator** | `docs/workflow/integrator-brief.md` | a merge that stopped (conflicts, a new red, a failed ship) | merges of unreviewed batches |
 <!-- endif --><!-- if:solo -->| **Builder** | `docs/HANDOVER.md` | code, tests, docs; merges its own batch | two batches at once |
 <!-- endif --><!-- if:reviewers -->| **Reviewer** | `docs/workflow/reviewer-brief.md` | one review file | code, tests, commits |
 <!-- endif -->
 
-Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif -->the planner<!-- if:solo -->, the builder, the CTO and the librarian<!-- endif -->. The planner starts pre-groomers, on the owner's yes per grooming pass.<!-- if:team --> The coordinator starts executors, reviewers, the integrator, the CTO and the librarian.<!-- endif --><!-- if:solo --><!-- if:reviewers --> The builder starts its reviewer.<!-- endif --><!-- endif --> Nothing else spawns, and **never for a small task:** queue it to a running session of its role, or do it inline. Any session may hand a **large read with a small answer** to a cheaper model (`{{M_HELPER}}`): read-only, the answer in at most 20 lines with a `file:line` per claim. Its answer is a lead: read the lines before you build on it. **Lookups are the small model's:** "what does the doc say about X", "where is Y" go to `/ask` (or a helper with its brief), never to the librarian or a large model reading the doc. **Several lookups at once go to ONE helper as a numbered list (≤5),** not one helper each.
+Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif -->the product lead<!-- if:solo -->, the builder, the architect and the librarian<!-- endif -->. The product lead starts pre-groomers, the architect's gate and a fresh plan reviewer, on the owner's yes per pass.<!-- if:team --> The coordinator starts executors, reviewers, the integrator, the architect and the librarian.<!-- endif --><!-- if:solo --><!-- if:reviewers --> The builder starts its reviewer.<!-- endif --><!-- endif --> Nothing else spawns, and **never for a small task:** queue it to a running session of its role, or do it inline.
 
 ## 3. How to work
 
@@ -43,11 +44,11 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Size rules:** files at most 400 lines, functions at most 80, enforced by an architecture test whose allow-list may only shrink.
 - **Every tunable number is a named constant** in the one place `ARCHITECTURE.md` names.
 - **Match the code around you:** names, structure, comment density. A comment only for what the code cannot say.
-- **Lookups: exact tools first.** In the docs `python -I -X utf8 tools/work/find.py <id or word>` (its row, status, hits by section; at most ~40 lines, cuts marked), `--toc <doc>` and `--section <doc>#<n>` instead of a whole read. In code `tools/work/map.py --find <name>` for where it is declared, `git grep -n "<name>"` for callers and a rename's sites. Before reading a file over ~300 lines: `python -I -X utf8 tools/work/map.py <file>` (its outline with line numbers; a folder: one line per file), then the range you need. **A file over ~15 KB is read whole at most once;** after that grep, then offset/limit. **Never a log or a shell's saved output whole:** tail it, grep `FAIL|ERROR` or rerun it filtered. No code-index server (measured: grep was as small and found more).
-- **Hand a read to a helper** only when the reading is large (300+ lines, many files, web pages), the answer small (~20 lines) and you won't need the text after. Read it yourself when you will edit or quote it, the answer must be exact, or the read is small.
+- **Lookups: exact tools first.** What relates to an id or a file: `python -I -X utf8 tools/work/kmap.py <topic>` (ranked; `--level 3`: what to read; `miss` logs a missing link). A word in the docs: `find.py <id or word>` (row, status, hits by section), `--toc <doc>`, `--section <doc>#<n>` instead of a whole read. In code `tools/work/map.py --find <name>` for where it is declared, `git grep -n "<name>"` for callers and a rename's sites. Before reading a file over ~300 lines: `map.py <file>` (its outline with line numbers; a folder: a line per file), then the range. **A file over ~15 KB is read whole at most once;** after that grep, then offset/limit. **Never a log or a shell's saved output whole:** tail it, grep `FAIL|ERROR` or rerun it filtered. No code-index server (measured: grep found more).
+- **Hand a large read with a small answer to a helper** (`{{M_HELPER}}`: read-only, at most 20 lines, a `file:line` per claim; a lead: read the lines before you build on it) only when the reading is large (300+ lines, many files, web pages) and you won't need the text after; read it yourself to edit or quote it, or when the answer must be exact. **Lookups** ("what does the doc say about X", "where is Y") go to `/ask`, never to the librarian or a large model; **several at once to ONE helper as a numbered list (≤5).**
 - **Stuck after two failed tries:** stop retrying; search how others solved it (the library's docs and issues), then say what you found and used.
 - **Product limits** live in `docs/VISION.md` ("Limits"). Every batch respects them.
-<!-- if:vault -->- **Work whose events are not merges** (research, writing, ops, data, planning): once the owner's needs are clear, the <!-- if:team -->coordinator<!-- endif --><!-- if:solo -->planner<!-- endif --> proposes one log to append, one line per event (research: `SOURCE url= kind=`, `CLAIM confidence=`; ops: `DEPLOY version=`, `INCIDENT minutes=`); the vault makes each line a note for free (`tools/vault/README.md`).
+<!-- if:vault -->- **Work whose events are not merges** (research, writing, ops, data, planning): once the owner's needs are clear, the <!-- if:team -->coordinator<!-- endif --><!-- if:solo -->product lead<!-- endif --> proposes one log to append, one line per event (research: `SOURCE url= kind=`, `CLAIM confidence=`; ops: `DEPLOY version=`, `INCIDENT minutes=`); the vault makes each line a note for free (`tools/vault/README.md`).
 <!-- endif -->
 ## 4. Git
 
@@ -63,7 +64,7 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 - **Shell traps** (`friction.py` counts them): `git grep -n -A 8 -e <pat> -- <path>` (options first); `rg` only in a shell newer than its install; trim by `$s[0..199] -join ''`, never `.Substring(0,N)`; the venv python for project modules; list a folder, never guess a path; a pwsh function named like an alias never runs (`R` = Invoke-History: `Get-Alias <name>`, or verb-noun); pwsh `git show`/console capture mangles non-ASCII: diff revisions as bytes (Python `subprocess`). **An environment error twice:** end your reply with `friction: <error> xN`.
 <!-- if:team -->- **Lessons:** report `lesson candidate: <rule> | guard: <guard>`; the coordinator files them.
 <!-- endif -->- **One step, many calls:** each step re-sends the whole context, so independent calls share one step, and a sequence you can plan (look up then query, try then fall back) is one script with its branches written in.
-- **With `rtk` on PATH,** prefix `git log` and `git status` (measured ~58% and ~46% less output); not `git diff`/`show`/`--stat`, scripts or pipes (~0-8%).
+- **With `rtk` on PATH,** prefix `git log` and `git status` (about half the output); not `git diff`/`show`, scripts or pipes.
 - **Keep each file's line endings;** never rewrite a whole file's endings in a commit. `.gitattributes` pins them (one ending per file type).
 - **Each brief has one tracked copy** in `docs/workflow/`; read it from your own worktree, never the main checkout's.
 - **Never change git config** in a worktree.
@@ -83,6 +84,6 @@ Who starts whom: the owner starts <!-- if:team -->the coordinator and <!-- endif
 | Budgets and measured numbers, per machine | `docs/MEASUREMENTS.md`, `docs/MACHINES.md` |
 | What the owner can try, by theme | `docs/ROADMAP.md` |
 | The prompts that start each session | `docs/PROMPTS.md` |
-| How the planner works | `docs/PLANNING.md` |
+| How specs and the order are made | `docs/PLANNING.md`, `docs/log/order.md` |
 <!-- if:team -->| The multi-session workflow and its briefs | `docs/workflow/` (diagrams: `workflow.html`) |
 <!-- endif -->

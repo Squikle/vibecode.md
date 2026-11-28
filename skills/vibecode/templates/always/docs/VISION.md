@@ -1,6 +1,6 @@
 # {{PROJECT}}: the vision
 
-Owned by the planner; changed only with the owner's words. Quote them where their words decide something.
+Owned by the product lead; changed only with the owner's words. Quote them where their words decide something.
 
 ## The idea
 
@@ -8,7 +8,7 @@ Their words ({{DATE}}): "{{IDEA}}"
 
 ## Who it is for, and the moment they reach for it
 
-(The planner fills this from the interview.)
+(The product lead fills this from the interview.)
 
 ## What it must do (the core)
 

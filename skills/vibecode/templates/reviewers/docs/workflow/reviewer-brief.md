@@ -43,8 +43,8 @@ Edit nothing, commit nothing, run no tests, start no containers, touch no other 
 
 - **Verdict:** `GREEN` · `GREEN WITH NOTES` (no blocker or major; minors and nits only) · `CHANGES NEEDED` (a blocker or a real major).
 - **Findings,** numbered, each with a severity (`blocker`, `major`, `minor`, `nit`), the `file:line`, what is wrong and what would be right, in at most 3 lines.
-- **Every blocker and major gets one cause tag:** `[spec-gap]` (the spec did not say) · `[no-test]` (no test would have caught it) · `[timing]` · `[at-limit]` (a file or function at its size limit) · `[drift]` (the branch is behind `main`) · `[other]`. The CTO counts them (`docs/workflow/cto.md`).
-- **Structure findings also get `[smell]`:** duplication, a rule in the wrong layer, a file or function growing past its limit, a third near-copy, a fix repeating an earlier one, a swallowed error, a missing log at a boundary, an unvalidated input. They block only as majors; the CTO collects them.
+- **Every blocker and major gets one cause tag:** `[spec-gap]` (the spec did not say) · `[no-test]` (no test would have caught it) · `[timing]` · `[at-limit]` (a file or function at its size limit) · `[drift]` (the branch is behind `main`) · `[other]`. The architect counts them (`docs/workflow/architect.md`).
+- **Structure findings also get `[smell]`:** duplication, a rule in the wrong layer, a file or function growing past its limit, a third near-copy, a fix repeating an earlier one, a swallowed error, a missing log at a boundary, an unvalidated input. They block only as majors; the architect collects them.
 - **The contract table:** each rule, met / partly / missing, with `file:line`.
 - A heading "Builder's answers", empty.
 

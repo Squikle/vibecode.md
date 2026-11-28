@@ -7,7 +7,7 @@ You build batches of {{PROJECT}} in a **git worktree** of your own. `<main tree>
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/lane-brief.md`, `docs/HANDOVER.md#3`.
 All from your own worktree (this brief too, never the main checkout's copy). The rest of this brief is `docs/workflow/lane-more.md`, read by section when a pointer here says (`python tools/work/find.py --section docs/workflow/lane-more.md#<n>`), once; its rules hold as if written here.
 - **For the job:** the batch's spec and only the specs it depends on; the one `docs/architecture/<area>.md` of your area (the map: look things up there, don't explore). `docs/ARCHITECTURE.md` by `find.py --toc`, then `--section` (where a new file goes, before you place one). `docs/DECISIONS.md` and `docs/QUESTIONS.md` only by grep.
-- A spec's `## How to build` (the CTO's) is followed; a deviation is one line in the report; a design question it does not answer goes to the coordinator for the CTO.
+- A spec's `## How to build` (the architect's) is followed; a deviation is one line in the report; a design question it does not answer goes to the coordinator for the architect.
 
 ## Cheap reads
 - `AGENTS.md` sections 3 and 5 hold the lookup, saved-output and no-polling rules. Plus: each brief and big doc once, in one call; `git grep -n -E "a|b"` for uses. More: `lane-more.md#1`.

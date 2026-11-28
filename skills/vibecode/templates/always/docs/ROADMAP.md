@@ -8,10 +8,10 @@ Everything built and planned, by theme, written as **what you get and what to tr
 | 🔀 | built and reviewed, waiting to merge |
 | 🔨 | being built now (by whom: `E2`, `lane M1`, ...) |
 | 📋 | planned, ready to build |
-| 🧹 | needs grooming: the planner writes its specs first |
+| 🧹 | needs grooming: the product lead writes its specs first |
 | ⏸ | waits for the owner's word |
 
-**Build order across themes:** (one line: 1 <theme's first batches> → 2 ... → 3 ...; the planner writes it, everyone keeps it current)
+**Build order across themes:** (one line: 1 <theme's first batches> → 2 ... → 3 ...; the product lead writes it, everyone keeps it current)
 
 ---
 
@@ -21,7 +21,7 @@ Newest first. **Every merge adds one dated part** (`### Since <date>, <time>`); 
 
 ### Since {{DATE}}
 
-**Set up (🧹):** the workflow, docs and scripts, by `/vibecode`. Next: the planner's first specs.
+**Set up (🧹):** the workflow, docs and scripts, by `/vibecode`. Next: the product lead's first specs.
 
 <!-- Form of a part:
 ### Since 2026-01-31, 14:20
@@ -41,9 +41,9 @@ Newest first. **Every merge adds one dated part** (`### Since <date>, <time>`); 
 |---|---|---|---|
 | 📋 | `bootstrap` [#1] | the app starts, with its tests and one command for the gate | run it |
 
-<!-- How to write this file (planner, coordinator, integrator):
+<!-- How to write this file (product lead, coordinator, integrator):
 - One table per theme, themes in build order; a row per batch: mark, `id` [#n] (merged rows drop the number), what you get (the user's view, one sentence), try (steps they can follow; "—" if nothing to see).
-- Planner: adds rows for new specs in their theme, writes the build-order line and a "Planned" line in the newest part.
+- Product lead: adds rows for new specs in their theme, writes the build-order line and a "Planned" line in the newest part.
 - Coordinator: marks 🔨 with who builds it when a session starts it, 🔀 when it is reviewed and gated; ⏸ when it waits for the owner.
 - Integrator: on each merge sets ✅, drops the [#n], renumbers the other [#n] from BACKLOG, adds the dated "What's new" part with the merged rows and their "Try".
 - Never describe code here; say what changes on screen or in use. Keep a row to one line.

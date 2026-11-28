@@ -71,7 +71,7 @@ python -I -X utf8 tools/vault/vault_now.py --if-changed     # every 2 minutes: N
 ## A project whose events are not merges
 
 Research, writing, ops, data, personal planning: the work has its own events. Once the owner's needs are clear, the
-coordinator (solo: the planner) proposes ONE log in one message: its file (`docs/log/<name>.md` when the team shares it,
+coordinator (solo: the product lead) proposes ONE log in one message: its file (`docs/log/<name>.md` when the team shares it,
 else `.work/log/<name>.md`), its TYPE words, the keys each one carries, who appends, and the views that answer the
 owner's questions (added to `Logs.base` or a new `.base`). For example:
 
