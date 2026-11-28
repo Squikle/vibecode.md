@@ -75,7 +75,7 @@ test("strip: pacer status/notice leave the outgoing call, flush/note/wake stay",
 const cfg = { batch: true, period: 60, me: true, from: "reply" } // the throttle tests below pin the reply mode
 const arr = { batch: true, period: 60, me: true }                  // no `from` = arrival (the default)
 // the hook's copy of OpenCode's auto-compaction continuation (seen live 2026-11-24 15:57 + 16:08: `user:keepID+recent`)
-const compact = (id = "c1") => ({ id, role: "user", metadata: { keepID: "msg_20f5f0189001s7wjVS4ZPGWHte", recent: [] }, content: "" })
+const compact = (id = "c1") => ({ id, role: "user", metadata: { keepID: "msg_fake0keep", recent: [] }, content: "" })
 test("compaction: its continuation is my own turn going on, so it always passes (and held items ride along)", () => {
   assert.equal(itemKind(compact()), "compaction")
   for (const c of [arr, cfg, { ...arr, me: false }]) {
