@@ -147,7 +147,7 @@ flowchart TB
 | merge cause (`cause.py`, `merge-log.py --from`), cache-ttl, tokens-since, union | `tools/work/` | 46, 51 |
 | friction (environment errors lanes worked around, clustered) | `tools/work/friction.py` | 72 |
 | doubt (code files lanes looked up the reason for, or flagged) | `tools/work/doubt.py` | 74 |
-| the knowledge map (what relates to a spec, file, decision or module; no model) | `tools/work/kmap.py`, `docs/kmap/` | 80 |
+| the knowledge map (what relates to a spec, file, decision or module; no model) | `tools/kmap/`, `docs/kmap/` | 80, 83 |
 | role telemetry (raw commands a tool covers, inline helpers, reads off the map, per role) | `tools/work/role-telemetry.py`, `docs/workflow/telemetry.md` | 79 |
 | the build order (an owner word into BACKLOG, stamped and logged; the order check) | `tools/work/order.py` | 76 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
@@ -178,7 +178,7 @@ What's logged, who writes it, the cost model, the line format and the ideas not 
 
 ### 8. The knowledge map and role telemetry
 
-Roles used to find what relates by grepping and by walking links: one grep for a feature word returned 234k chars of hits in the source project. `tools/work/kmap.py` builds a typed map from what is already written (specs and their `Links:` lines, the backlog, decisions, the architecture's tables, `docs/kmap/modules.md`, imports, tests, merges) with **no model, in about a second**, and answers one question ranked and cut to a budget, with a level of detail and a signal to stop. `tools/work/role-telemetry.py` then counts, per role, the raw commands a tool already covers and the reads the map never gave; a flag climbs a ladder from "read three examples" to a fix, measured, not blocked.
+Roles used to find what relates by grepping and by walking links: one grep for a feature word returned 234k chars of hits in the source project. `tools/kmap/kmap.py` builds a typed map from what is already written (specs and their `Links:` lines, the backlog, decisions, the architecture's tables, `docs/kmap/modules.md`, imports, tests, merges) with **no model, in about a second**, and answers one question ranked and cut to a budget, with a level of detail and a signal to stop. Each merge measures it: the map at the merge's parent against the files the merge changed, the MERGES entry's `Recall:` line (0.33 at 20 files over 80 merges in the source project, honest). Its misses, co-change and off-map reads become `found` links by evidence, or wait for the architect's review. `tools/work/role-telemetry.py` then counts, per role, the raw commands a tool already covers and the reads the map never gave; a flag climbs a ladder from "read three examples" to a fix, measured, not blocked.
 
 ```mermaid
 flowchart LR
@@ -229,7 +229,7 @@ Every role gets an opencode command in the new project, each setting its own mod
 ## Keeping tokens low
 
 - **Read less:** doc budgets and start reads (`tools/work/check-docs.py`), briefs of at most 40 lines with the rest read by section, a big file read whole once, outlines (`tools/work/map.py`) and `git grep` before reading code.
-- **Ask the map, not the tree:** `tools/work/kmap.py <topic>` for what relates, ranked and budgeted, with no model.
+- **Ask the map, not the tree:** `tools/kmap/kmap.py <topic>` for what relates, ranked and budgeted, with no model.
 - **Wait less:** long runs in the foreground, never polled (polling was 37% of integrator cache reads); a small live queue file.
 - **Carry less:** the planning roles retire at ~140k (their alias compacts at ~150k: the old 250k line never fired), integrators after ~4 merges, reviewers fresh; lanes auto-compact early.
 - **Wake less** (opt-in): the pacer holds the coordinator's wake-ups for one period and sends them as one model call.
@@ -244,7 +244,7 @@ Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](O
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, the knowledge map's modules and golden queries under `docs/kmap/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the knowledge map, the build order, role telemetry, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, the knowledge map under `tools/kmap/` with its modules and golden queries under `docs/kmap/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the build order, role telemetry, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the product lead's prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the product lead's session plans the product.

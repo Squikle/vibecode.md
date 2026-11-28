@@ -172,7 +172,7 @@ flowchart TB
 </section>
 <section id="knowledge">
   <h2>8. What relates, and how roles use their tools</h2>
-  <p><code>tools/work/kmap.py</code> builds a map of the project from what is already written (specs and their <code>Links:</code> lines, the backlog, decisions, the architecture's tables, <code>docs/kmap/modules.md</code>, imports, tests, git merges) with no model, in about a second, and answers "what relates to X" ranked and cut to a budget. <code>tools/work/role-telemetry.py</code> counts, per role, the raw commands a tool covers and the reads the map never gave; a flag climbs <code>docs/workflow/telemetry.md</code>'s rungs, measured, not blocked.</p>
+  <p><code>tools/kmap/kmap.py</code> builds a map of the project from what is already written (specs and their <code>Links:</code> lines, the backlog, decisions, the architecture's tables, <code>docs/kmap/modules.md</code>, imports, tests, git merges) with no model, in about a second, and answers "what relates to X" ranked and cut to a budget. <code>tools/work/role-telemetry.py</code> counts, per role, the raw commands a tool covers and the reads the map never gave; a flag climbs <code>docs/workflow/telemetry.md</code>'s rungs, measured, not blocked.</p>
   <pre class="mermaid">
 flowchart LR
   S["specs, backlog, decisions,<br/>architecture, modules, code, git"] --> B["kmap.py build<br/>no model, ~1-2 s"]

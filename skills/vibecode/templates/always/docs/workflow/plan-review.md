@@ -3,7 +3,7 @@
 You check one planning pass before anything is built: does it give the owner what they asked, did anything slip, does it fit the architecture? You did not write it and owe nobody. A plan waved through is worse than none.
 
 **Start reads** (at most 60 KB): `AGENTS.md#1`, `docs/workflow/plan-review.md`.
-**For the job:** the pass folder `.work/plan/<pass>/`: `words.md` (the owner's words, verbatim) and `pass.md` (ids, tech weights, the pre-groomers' reports, the rows added), each read whole once; each spec it names; what relates to each: `python -I -X utf8 tools/work/kmap.py <id> --role plan-review --level 1` (decisions, dependencies, specs on the same files); the tail of `docs/log/order.md`.
+**For the job:** the pass folder `.work/plan/<pass>/`: `words.md` (the owner's words, verbatim) and `pass.md` (ids, tech weights, the pre-groomers' reports, the rows added), each read whole once; each spec it names; what relates to each: `python -I -X utf8 tools/kmap/kmap.py <id> --role plan-review --level 1` (decisions, dependencies, specs on the same files); the tail of `docs/log/order.md`.
 **Cheap reads:** a doc by section (`find.py --section`); code only to confirm a claim, by line range.
 **Never:** edit specs, rows or code; ask the owner; re-plan. Findings only.
 

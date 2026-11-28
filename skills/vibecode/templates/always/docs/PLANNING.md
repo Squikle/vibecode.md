@@ -11,7 +11,7 @@ The product lead's brief is `docs/workflow/product.md`; this file holds its rule
    - `docs/ARCHITECTURE.md`, a first cut: the stack and why (also a row each in `docs/DECISIONS.md`), the folder layout, the layers and what may import what, where each kind of new thing goes, the test kinds with their exact commands, the size rules and where tunable constants live.
    - **Batch 1 is always `bootstrap`:** the skeleton that runs, the unit test runner, the architecture test (size rules, the map in `ARCHITECTURE.md`, layers), <!-- if:e2e -->the browser/e2e runner with one smoke test, a test stack that several worktrees can share, the lock commands filled into `docs/HANDOVER.md` section 4, <!-- endif -->one gate command, and the run command for the owner.
    - Specs for the next 5 to 10 batches (`docs/specs/<id>.md`, from `_template.md`), and their rows in `docs/BACKLOG.md` in order, by "The order" below.
-   - `docs/kmap/modules.md`: a first row per part of the product you can already name (its id, one line, the spec ids and paths it starts from), so `tools/work/kmap.py` groups what belongs together.
+   - `docs/kmap/modules.md`: a first row per part of the product you can already name (its id, one line, the spec ids and paths it starts from), so `tools/kmap/kmap.py` groups what belongs together.
    - `docs/ROADMAP.md`, by the rules at its end: the themes in build order with the planned rows (what they get, what they'll try), the "Build order across themes" line, and a "Planned" line in the newest "What's new" part. Every later planning pass updates it the same way.
 4. **Commit and push** (if there is a remote), and tell them in a short reply what the first batches give them, and which prompt to start next (`docs/PROMPTS.md`).
 
@@ -24,7 +24,7 @@ The product lead's brief is `docs/workflow/product.md`; this file holds its rule
 - **Their words** go in "What it is for", quoted. Your additions are marked as yours.
 - **A bug spec starts with a reproduction** seen red, and says so in its Status line.
 - **Dependencies and overlaps:** "Depends on" names open specs it waits for; "Same files as" names open specs that touch the same files, so the coordinator never runs them in parallel. Ids in backticks, prose after a period.
-- **Links:** the header's `Links:` line names what else it relates to, from the template's closed list of types; `tools/work/kmap.py check` turns a dangling id or an unknown type red. A link you learned while writing costs one line now and saves every later reader a search.
+- **Links:** the header's `Links:` line names what else it relates to, from the template's closed list of types; `tools/kmap/kmap.py check` turns a dangling id or an unknown type red. A link you learned while writing costs one line now and saves every later reader a search.
 <!-- if:reviewers_risky -->- **`Review: yes`** on specs that touch performance, data, security, money or a big piece of UI; those get a reviewer.
 <!-- endif -->- **Open calls** each carry a default, so a builder never waits for an answer.
 - **`Tech: light | heavy`** in the Status block: heavy when it adds a seam, crosses two areas of the map, adds a dependency or touches a file the architect lists. In each pass the architect writes a heavy spec's `## How to build` and a light one's `Fit:` line before it is built (`docs/workflow/architect.md`), then a fresh plan reviewer checks the pass against the owner's words (`docs/workflow/plan-review.md`).

@@ -15,6 +15,10 @@ python -I -X utf8 tools/vault/vaultify.py      # [--rev <rev>] [--vault <dir>] [
 
 One JSON line: `written`, `merged`, `conflicts`, `deleted`, `misses` (a doc row or committed log line of a shape it does
 not know: details on stderr), `batches`, `log_events`, `log_misses`, `seconds`; exit 1 on a miss or a conflict.
+Then `mesh/`: the knowledge map of the same rev (`tools/kmap/kmap.py export --rev`; `--mesh off` skips it, `--src`
+too): one note per module, spec and area, **all regenerated** each build, a gone node's note deleted, so edit the
+source in git, never a `mesh/` note. The JSON line's `mesh` is `{written, same, deleted, seconds}` or one error word,
+and never changes the exit.
 `--if-changed` exits at once when the last build was of the same rev, by the same scripts, with the same local log
 bytes. `--rev` defaults to local `main`, else `origin/main` (the gate's base rule); the hook builds `--rev HEAD`.
 
@@ -132,7 +136,8 @@ python -I tools/vault/hook.py remove     # ours out, a chained one back
 ```
 
 They act only on `main` (a lane's commit starts no process), build `HEAD --if-changed`, log one line per run in
-`.work/vault-hook.log`, print one line only on a miss, a conflict or an error, and never fail git. The integrator's
+`.work/vault-hook.log` (with `mesh=<written>/<seconds>s`), print one line only on a miss, a conflict or an error,
+and never fail git: every git and kmap call has a timeout (`tools/kmap/tests/test_hook_timeouts.py`). The integrator's
 `gate.py ship` also runs it and reports `vault=<written>/<misses>`.
 
 ## A miss

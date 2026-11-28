@@ -327,9 +327,9 @@ def work_dir():
     """`<main tree>/.work`: the main tree is the parent of git's common dir (every worktree shares it)."""
     try:
         r = subprocess.run(["git", "-C", str(HERE), "rev-parse", "--path-format=absolute", "--git-common-dir"],
-                           capture_output=True, creationflags=NO_WINDOW)
+                           capture_output=True, creationflags=NO_WINDOW, timeout=30)
         common = r.stdout.decode().strip() if not r.returncode else ""
-    except OSError:
+    except (OSError, subprocess.SubprocessError):
         common = ""
     return (Path(common).parent if common else HERE.parents[1]) / ".work"
 

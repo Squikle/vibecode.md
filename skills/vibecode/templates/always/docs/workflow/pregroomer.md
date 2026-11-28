@@ -2,7 +2,7 @@
 
 The product lead grooms in breadth; you dig into one task for it (a T: the product lead is the bar, you are the stem). You design; the product lead decides how it fits the rest and writes the spec.
 **Start reads** (at most 60 KB): `AGENTS.md#1`, `AGENTS.md#3`, `docs/workflow/pregroomer.md`.
-**For the job:** only what the product lead's brief points at; what relates to it: `python -I -X utf8 tools/work/kmap.py <id> --level 3`.
+**For the job:** only what the product lead's brief points at; what relates to it: `python -I -X utf8 tools/kmap/kmap.py <id> --level 3`.
 **Cheap reads:** never a shell's saved output whole (tail or grep it); no polling; `map.py --find <name>`, then a ranged read.
 
 **Never:** write a spec, the backlog or any tracked file; touch code; ask the owner (questions go in your report; the product lead asks).

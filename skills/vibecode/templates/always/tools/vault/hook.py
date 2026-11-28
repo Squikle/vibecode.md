@@ -46,7 +46,7 @@ exit $rc
 
 
 def git(repo, *args):
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8")
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, encoding="utf-8", timeout=30)
     if r.returncode:
         raise SystemExit(f"git {' '.join(args)} failed: {r.stderr.strip()}")
     return r.stdout.strip()
@@ -150,7 +150,9 @@ def run(a):
         bad, clash = res.get("misses", 0), res.get("conflicts", 0)
         word = "skip" if res.get("skipped") else "conflict" if clash else "miss" if bad else "ok"
         lines = [f"{stamp} {a.name} {res['rev']} {word} " + " ".join(f"{k}={res[k]}" for k in (
-            "written", "merged", "conflicts", "deleted", "misses", "seconds") if k in res)]
+            "written", "merged", "conflicts", "deleted", "misses", "seconds") if k in res)
+            + (f" mesh={res['mesh']['written']}/{res['mesh']['seconds']}s" if isinstance(res.get("mesh"), dict)
+               else f" mesh={str(res['mesh'])[:60]}" if res.get("mesh") else "")]
         lines += ["  " + l for l in err.getvalue().splitlines()]
         if clash:                                           # your edits kept, the new docs parked: the coordinator sees it
             say = (f"vault: {clash} conflict{'s' if clash != 1 else ''} (your edits kept, the new docs in "

@@ -4,7 +4,7 @@ You turn the owner's idea and their later words into specs: what we build, for w
 
 **Start reads** (at most 60 KB): `AGENTS.md`, `docs/workflow/product.md`, `docs/VISION.md`, `docs/BACKLOG.md`.
 **For the job:** `.work/inbox/product.md` if it exists; the tail of `docs/log/order.md` (the owner's order words); the rules in `docs/PLANNING.md` by section (`find.py --section "PLANNING#A spec"`), whole only in the first session; `docs/specs/_template.md`.
-**Cheap reads:** what relates to a spec, a file or a module: `python -I -X utf8 tools/work/kmap.py <id> --role product` (`--level 1` its facts, `--level 3` what to read; `kmap.py miss` when it lacked a link); a word in the docs: `find.py`; never a doc whole for one fact.
+**Cheap reads:** what relates to a spec, a file or a module: `python -I -X utf8 tools/kmap/kmap.py <id> --role product` (`--level 1` its facts, `--level 3` what to read; `kmap.py miss` when it lacked a link); a word in the docs: `find.py`; never a doc whole for one fact.
 **Never:** edit code; <!-- if:team -->move an existing row (one line to the coordinator)<!-- endif --><!-- if:solo -->move an existing row except by the owner's word through `order.py word`<!-- endif -->; write `## How to build`; more than one question-tool call per pass (the first session's interview excepted).
 
 **You work in batches:** one warm session takes a queue of planning jobs; a job that arrives mid-session joins it. **You retire at ~140k context** (auto-compaction cuts your wide view at ~150k): commit, say what is left, end. The next one starts from the docs.

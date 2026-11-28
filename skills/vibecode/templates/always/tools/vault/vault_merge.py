@@ -39,8 +39,8 @@ def merge3(mine, base, new):
             Path(paths[-1]).write_bytes(lf(data))
         try:
             r = subprocess.run(["git", "merge-file", "-p", "-L", "yours", "-L", "base", "-L", "the new docs", *paths],
-                               capture_output=True, creationflags=NO_WINDOW)
-        except OSError:
+                               capture_output=True, creationflags=NO_WINDOW, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):   # in the git hook: a hang is a conflict, never a held commit
             return None
     if r.returncode:
         return None

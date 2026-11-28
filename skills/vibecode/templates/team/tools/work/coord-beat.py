@@ -6,7 +6,7 @@ gate verdict per sha (`.work/ci/<sha8>.json` and `.only.json`, and a run folder 
 locks (`.work/<name>.lock` or `.lock.d`: holder and age; a running or failed autodeploy too), the gates waiting for a
 lock or a CPU slot (the `waiting for` lines of each run's `gate.log`; not a gate whose `gate.pid` is gone), the coordinator's child sessions with how long each has
 been quiet (the opencode database read-only for the children; with no database, `opencode session list --format
-json` for the top level), and the head of `.work/integrator-queue.md`.
+json` for the top level), the head of `.work/integrator-queue.md`, and a nudge from `.work/kmap/review.json`.
 
 Read-only: it writes nothing, takes no lock and starts nothing but `git`, the pacer and `opencode session list`.
 The standard library only, so it runs the same on every OS. `--selftest` checks it on a scratch `.work`.
@@ -290,8 +290,20 @@ def queue(path: Path) -> list[str]:
     return out + ["queue last: " + ((last or ["(none)"])[0][:100])]
 
 
+def review(work: Path, now_ms: float) -> list[str]:  # kmap_review.write_due; `size`: the log's bytes at its count
+    try:
+        r = json.loads((work / "kmap" / "review.json").read_text(encoding="utf-8"))
+        n, since = r["unreviewed"], r["since"] * 1000 or now_ms
+        c, due = work / "kmap" / "candidates.jsonl", n > r["max"] or (n and now_ms - since >= r["days"] * DAY_MS)
+        n = f"{n}+" if c.is_file() and c.stat().st_size != r.get("size") else n      # lines appended since its count
+        return [f"kmap: {n} candidate links to review ({ago(since, now_ms)}): `kmap.py candidates --review`"] if due else []
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+
+
 def beat(work: Path, parent: str | None, now_ms: float, top=None, db=None) -> list[str]:
-    out = pacer() + gates(work / "ci", now_ms) + locks(work, now_ms) + waiting(work / "ci", now_ms)
+    out = pacer() + review(work, now_ms) + gates(work / "ci", now_ms) + locks(work, now_ms)
+    out += waiting(work / "ci", now_ms)
     out += sessions(parent, now_ms, top, db) + queue(work / "integrator-queue.md")
     return out[:MAX_LINES]
 

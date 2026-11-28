@@ -20,8 +20,10 @@ Logs (`--logs <file or folder>`, repeatable): one line per event, `- YYYY-MM-DD 
 note under `log/<log>/` with its fields as properties (README "Logs"). The committed ones, `docs/log/**/*.md`, are read
 from git like every doc (a bad line is a miss); the local ones default to the main tree's `.work/coordinator-log.md` and
 `.work/log/` (not with `--src`; a bad line there is a `log_misses` count, never the exit code).
+Then `mesh/`, the knowledge map of the same rev (`mesh`: `tools/kmap/kmap.py export --rev`, every note regenerated;
+`--mesh`; the JSON line's `mesh` says what it wrote and its seconds, or one word on an error).
 """
-import argparse, datetime, io, json, re, subprocess, sys, tarfile, tempfile, time
+import argparse, datetime, io, json, os, re, subprocess, sys, tarfile, tempfile, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -71,8 +73,33 @@ VIEWS = {  # Bases (Obsidian 1.9+, a core plugin): file -> (folder, [(name, colu
 }
 
 
+KMAP = HERE.parent / "kmap" / "kmap.py"
+MESH_TIMEOUT = 30   # `kmap export --rev` took 2.4-2.9 s cold, the slowest cold map build seen 7 s
+
+
 def git(repo, *args) -> subprocess.CompletedProcess:
-    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, creationflags=NO_WINDOW)
+    """In the git hook: a hang may not hold the commit (each call is an archive, a log or one blame, under 1 s)."""
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, creationflags=NO_WINDOW, timeout=60)
+
+
+def mesh(repo, rev, vault):
+    """`tools/kmap/kmap.py export --rev` into <vault>/mesh/: the knowledge map of the same rev, every note regenerated,
+    one whose node is gone deleted. The `GIT_*` variables a hook sets are dropped; "no kmap" with no `tools/kmap/`."""
+    if not KMAP.is_file():
+        return "no kmap"
+    t0 = time.perf_counter()
+    env = {k: v for k, v in os.environ.items() if not k.upper().startswith("GIT_") or k.upper() == "GIT_CEILING_DIRECTORIES"}
+    try:
+        r = subprocess.run([sys.executable, "-I", "-X", "utf8", str(KMAP), "--root", str(repo), "export", "--vault",
+                            str(vault), "--rev", rev], capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           env=env, timeout=MESH_TIMEOUT, creationflags=NO_WINDOW)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"error: {type(e).__name__}"
+    got = re.search(r"export: (\d+) notes written, (\d+) unchanged, (\d+) deleted", r.stdout)
+    if r.returncode or not got:
+        return "error: " + ((r.stderr.strip().splitlines() or [f"exit {r.returncode}"])[-1])[:160]
+    return {"written": int(got[1]), "same": int(got[2]), "deleted": int(got[3]),
+            "seconds": round(time.perf_counter() - t0, 2)}
 
 
 def default_rev(repo) -> str:
@@ -402,6 +429,8 @@ def main(argv=None) -> int:
     ap.add_argument("--logs", action="append", metavar="PATH",
                     help="a local log file or folder (repeatable; replaces the default .work/coordinator-log.md, .work/log/)")
     ap.add_argument("--resolve", metavar="PATH", help="a conflict merged by hand: take the file back (`.vaultify/conflicts/`)")
+    ap.add_argument("--mesh", choices=("auto", "on", "off"), default="auto",
+                    help="the knowledge map's notes in <vault>/mesh/, `kmap.py export --rev` (auto: on, off with --src)")
     a = ap.parse_args(argv)  # an unknown argument exits 2
     for p in a.logs or ():
         if not Path(p).exists():
@@ -447,13 +476,15 @@ def main(argv=None) -> int:
         (vault / NOW).write_text(NOW_STUB, encoding="utf-8")
     state.write_text(json.dumps({"rev": rev, "tool": tool, "logs": logs}) + "\n", encoding="utf-8")
     alert(vault, rev, sync.conflicts, b.miss)
+    meshed = mesh(a.repo, rev, vault) if a.mesh == "on" or a.mesh == "auto" and not a.src else None
     for kind, items in (("miss", b.miss), ("conflict", sync.conflicts), ("log-miss", b.log_miss)):
         for x in items[:8]:
             print(f"{kind}: {x}", file=sys.stderr)
     print(json.dumps({"rev": rev, "skipped": False, "seconds": round(time.perf_counter() - t0, 2), "files": len(b.out),
                       "written": sync.written, "merged": sync.merged, "conflicts": len(sync.conflicts),
                       "deleted": sync.deleted, "misses": len(b.miss), "batches": len(b.batches),
-                      "log_events": sum(b.log_count.values()), "log_misses": len(b.log_miss)}))
+                      "log_events": sum(b.log_count.values()), "log_misses": len(b.log_miss),
+                      **({"mesh": meshed} if meshed else {})}))
     return 1 if b.miss or sync.conflicts else 0
 
 
