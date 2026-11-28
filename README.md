@@ -149,6 +149,8 @@ flowchart TB
 | doubt (code files lanes looked up the reason for, or flagged) | `tools/work/doubt.py` | 74 |
 | the knowledge map (what relates to a spec, file, decision or module; no model) | `tools/kmap/`, `docs/kmap/` | 80, 83 |
 | role telemetry (raw commands a tool covers, inline helpers, reads off the map, per role) | `tools/work/role-telemetry.py`, `docs/workflow/telemetry.md` | 79 |
+| the role registry (mode, model, budget, value per role; agent files generated; `may` before a spawn), the read-only `helper`, the value rating | `tools/work/roles.py`, `roles.json`, `role_value.py`, `helper.md`; `.opencode/agents/` | 84 |
+| background jobs (one manifest, one Python command on either OS) | `tools/jobs/` | 84 |
 | the build order (an owner word into BACKLOG, stamped and logged; the order check) | `tools/work/order.py` | 76 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
 | vaultify (docs and logs as notes, table views) and its git hook; the gate's history log | `tools/vault/`, `tools/ci/gate.py` | 28, 54, 71 |
@@ -216,7 +218,7 @@ The roles, models, schema, link tiers, decay checks, evals, background jobs and 
 | **Executor** | builds one batch (or a chain) in its own worktree, test-first, by a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition | top, medium (high when it needs thinking) |
 | **Reviewer** | reads the diff against the spec before the slow tests; on green fixes its own minors and runs the gate (`READY TO MERGE`); tags blockers and majors by cause and structure problems `[smell]` for the architect; a delta review of docs or tools only runs on a mid model | top (mid for such a delta), high, fresh per review |
 | **Integrator** | short-lived (~4 merges or 150k context): merges reviewed batches from its brief, a queue file and the report, never the specs; runs the gate, ships (push, vault, redeploy after code merges; with autodeploy on the app follows `main` by itself), writes the roadmap's "What's new" and a doc size line | mid, high |
-| **Lookup helper** | `/ask`: finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line`; up to 5 numbered questions in one call, each answered under its number | small, low |
+| **Lookup helper** | `/ask` (agent `helper`, read-only; every role may hand it a big read with a small answer): finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line`; up to 5 numbered questions in one call, each answered under its number | small, low |
 
 **Renamed:** the planner is now the product lead (`/product`, `docs/workflow/product.md`) and the CTO the architect (`/architect`, `docs/workflow/architect.md`). An answers file with the old keys `M_PLANNER` and `M_CTO` still deploys; projects set up before keep their files (deploy never overwrites).
 
@@ -244,7 +246,7 @@ Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](O
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, the knowledge map under `tools/kmap/` with its modules and golden queries under `docs/kmap/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the build order, role telemetry, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/` and their agent files under `.opencode/agents/` (generated from the role registry `tools/work/roles.json`), the knowledge map under `tools/kmap/` with its modules and golden queries under `docs/kmap/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the build order, role telemetry, the session token audit, the coordinator's heartbeat, the review pack, the role registry and its value rating), the background jobs under `tools/jobs/`, the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
 7. **Prints the session prompts** with model and effort: the product lead's prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
 It writes no product code; the product lead's session plans the product.
@@ -293,7 +295,7 @@ The interview answers decide which template sets are deployed:
 skills/vibecode/SKILL.md          the skill
 skills/vibecode/scripts/deploy.py copies and fills the templates
 skills/vibecode/vault.md          the vault: append-only logs as a zero-LLM database
-skills/vibecode/knowledge-and-roles.md  the planning roles, the build order, the knowledge map, role telemetry, background jobs
+skills/vibecode/knowledge-and-roles.md  the planning roles, the build order, the knowledge map, role telemetry, the role registry, background jobs
 skills/vibecode/templates/        always/ team/ solo/ reviewers/ e2e/ remote/ (opencode-global/: opt-in, deploy.py --global)
 commands/vibecode.md              the /vibecode command
 ```

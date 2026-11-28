@@ -237,21 +237,21 @@ An L2 case: `{"id", "role", "fixture", "prompt", "must_call": [...], "must_not_c
 
 ## 7. Background jobs
 
-Today the coordinator creates its no-model shell automations by hand (friction, doubt, telemetry, the vault's Now note) and recreates them at a handover. On the source project, 2 of 3 live jobs were PowerShell-only and the second machine (macOS, no pwsh) ran none (MEAS). The plan:
+The coordinator used to create its no-model shell automations by hand and recreate them at a handover. On the source project, 2 of 3 live jobs were PowerShell-only and the second machine (macOS, no pwsh) ran none (MEAS). Now:
 
-1. **`tools/jobs/jobs.json`**, checked in: `{name, every, run, os?}` per job.
-2. **`tools/jobs/run.py <job>`**: one Python entry point (no shell syntax of its own), so Windows and macOS run the same command.
-3. **`jobs.py sync`** at the coordinator's start on each machine: finds the repo root and the interpreter (`python` / `python3`), writes each job as `<py> -I -X utf8 <root>/tools/jobs/run.py <job>` through OpenCode's automation API (experimental at the time of writing, `/api/experimental/automation`; if absent, it prints the create call for the coordinator), and deletes `vibecode:`-prefixed jobs no longer in the manifest. **`jobs.py doctor`** in the heartbeat flags a job late by over twice its interval or failing.
+1. **`tools/jobs/jobs.json`**, checked in: `{name, every, run, os?, alert_exit?}` per job and one `prefix` (the project's name). It ships role telemetry every 4 hours.
+2. **`jobs.py run <job>`**: one Python entry point (no shell syntax of its own), so Windows and macOS run the same command. An exit in `alert_exit` (role telemetry's 1: a NEW flag) prints ALERT and exits 0, so the automation reads as fired, not failed.
+3. **`jobs.py sync [--apply]`** on each machine, from the checkout the jobs run from: writes each job as `<py> -I -X utf8 <root>/tools/jobs/jobs.py run <job>` through OpenCode's automation API (experimental at the time of writing; without `--apply` it only prints the calls), replaces a changed one and deletes `<prefix>` jobs no longer in the manifest, never another's.
 4. No code-mode automations for watchdogs (one paused when the tool it called disappeared); prompt automations only for self-wakes (each costs a model call).
 
-Status: designed, **not built** (phase 2). Whether the OpenCode service starts at login on each OS is UNVERIFIED.
+Status: **built** (`roles-2`); a heartbeat check for a late or failing job is not. Whether the OpenCode service starts at login on each OS is UNVERIFIED.
 
 ## 8. Phased rollout
 
 | Phase | Work | Exit test |
 |---|---|---|
 | **1 (shipped)** | the role names and briefs, the plan reviewer, the architect's gate on every pass, `order.py` and the coordinator's order; `kmap.py` build/query/near/path/impact/miss/check/export with no model; the `Links:` line, `docs/kmap/modules.md`, `golden.md`; `role-telemetry.py` with the ladder; retire at ~140k | unit tests green on fixtures (kmap 13, order 4, telemetry 6); every deploy variant passes `check-docs.py` |
-| **2** | role agent files (`.opencode/agents/<role>.md`: model, `allow`/`deny` only), so the database names each session's role; `kmap.py brief <spec> --role` in the lane and reviewer commands' shell blocks; `kmap check` in the gate's docs part; a RECALL line per merge and its true-replay baseline; the jobs manifest; `vaultify` calls `kmap export` | recall baseline published; no lane stalls on a permission; jobs run on both OSes |
+| **2** | role agent files (`.opencode/agents/<role>.md`, shipped: generated from `tools/work/roles.json` by `roles.py gen`, checked by `roles.py check`), so the database names each session's role; `kmap.py brief <spec> --role` in the lane and reviewer commands' shell blocks; `kmap check` in the gate's docs part; a RECALL line per merge and its true-replay baseline; the jobs manifest; `vaultify` calls `kmap export` | recall baseline published; no lane stalls on a permission; jobs run on both OSes |
 | **3** | per-role multi-tools: a shared core (`look`: kmap, then `find.py`, then `map.py --find`; `show <file>[:a-b]`; `rep` exact-once replace; output cut to width) and role verbs (`product.py words add`, `arch.py gate`, `planrev.py pack`); L1 replays | the inline helpers' count down by half; the replaceable share down per role |
 | **4** | tier C: cards for the top modules by open specs, candidate link typing, quote checks, expiry, the weekly audit; L2 live evals | audit precision ≥ 0.7 per type; recall up against phase 2 |
 
