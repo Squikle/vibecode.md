@@ -1,8 +1,8 @@
 # vibecode
 
-An opencode skill and command that set up a fresh project folder for a **multi-agent build**: you talk to one coordinator; a planner decides what to build, a CTO decides how, executors build it in worktrees, reviewers judge it before the slow tests, the coordinator merges it (an integrator steps in on a conflict or a red), and a librarian keeps the docs short. Each runs in its own session, on the model that fits its job.
+An opencode skill and command that set up a fresh project folder for a **multi-agent build**: you talk to one coordinator, which owns the build order; a product lead decides what to build, an architect decides how, a fresh plan reviewer checks the plan against your words, executors build it in worktrees, reviewers judge it before the slow tests, the coordinator merges it (an integrator steps in on a conflict or a red), and a librarian keeps the docs short. Each runs in its own session, on the model that fits its job; a no-model knowledge map tells each of them what relates to what.
 
-- [How it works](#how-it-works): the diagrams, from [who starts whom](#1-who-starts-whom) to [the machinery around the agents](#6-the-machinery-around-the-agents) (CI, deploy, pacer, plugins and what each saves) and [the vault](#7-the-vault-what-happened-as-a-database-for-no-model-tokens) (the logs as a free database)
+- [How it works](#how-it-works): the diagrams, from [who starts whom](#1-who-starts-whom) to [the machinery around the agents](#6-the-machinery-around-the-agents) (CI, deploy, pacer, plugins and what each saves) [the vault](#7-the-vault-what-happened-as-a-database-for-no-model-tokens) (the logs as a free database) and [the knowledge map](#8-the-knowledge-map-and-role-telemetry) (what relates to what, and which roles bypass their tools)
 - [The roles](#the-roles) · [Commands](#commands) · [Keeping tokens low](#keeping-tokens-low)
 - [What `/vibecode` does](#what-vibecode-does) · [Install](#install) · [Usage](#usage) · [Template flags](#template-flags) · [Layout](#layout)
 
@@ -10,69 +10,77 @@ An opencode skill and command that set up a fresh project folder for a **multi-a
 
 ### 1. Who starts whom
 
-The owner starts two sessions: the coordinator (the entry point) and, to plan, the planner. Everything else is started by them. Any session may hand a cheap lookup to a small model. What sits between them (CI, deploy, the pacer's gate in front of the coordinator): [diagram 6](#6-the-machinery-around-the-agents).
+The owner starts two sessions: the coordinator (the entry point) and, to plan, the product lead. The product lead starts its pre-groomers, the architect's gate and a fresh plan reviewer for each pass; everything else is started by the coordinator. Any session may hand a cheap lookup to a small model, and ask the knowledge map what relates. What sits between them (CI, deploy, the pacer's gate in front of the coordinator): [diagram 6](#6-the-machinery-around-the-agents).
 
 ```mermaid
 flowchart LR
-  M((Owner)) --> C[Coordinator<br/>entry point]
-  M --> P[Planner]
+  M((Owner)) --> C[Coordinator<br/>entry point, owns the order]
+  M --> P[Product lead<br/>what and why]
   C -->|forwards their words| P
   P -->|one per heavy task| G[Pre-groomer]
-  C --> CTO[CTO<br/>main code lead]
+  P -->|each pass: the gate| A[Architect<br/>how it is built]
+  P -->|each pass, fresh| PR[Plan reviewer]
+  C -->|sweeps, design calls| A
   C --> L[Librarian<br/>docs only]
   C --> E[Executors<br/>in worktrees]
   C --> R[Reviewer<br/>fresh per review]
   C --> I[Integrator]
-  R -. "[smell] tags" .-> CTO
+  R -. "[smell] tags" .-> A
   I -. "doc size line" .-> L
-  ANY["any session<br/>owner, planner, CTO, executors..."] -. "/ask: one lookup<br/>or up to 5 at once" .-> H[Small-model lookup]
+  ANY["any session<br/>owner, product lead, architect, executors..."] -. "/ask: one lookup<br/>or up to 5 at once" .-> H[Small-model lookup]
+  ANY -. "kmap.py: what relates<br/>no model" .-> K[(knowledge map)]
 ```
 
 ### 2. A big task, from the owner's words to the running app
 
-The coordinator routes; it asks the owner once whether the CTO checks the planned rows (recommended for every `Tech: heavy` row).
+The owner's yes covers the whole pass: pre-groomers, the architect's gate (`How to build` for heavy rows, a one-line `Fit:` for light ones) and a fresh plan review against their verbatim words. An owner word about the order goes into the backlog in that same turn (`order.py word`), never into a planning session.
 
 ```mermaid
 sequenceDiagram
   autonumber
   actor M as Owner
   participant C as Coordinator
-  participant P as Planner
+  participant P as Product lead
   participant G as Pre-groomers
-  participant T as CTO
+  participant A as Architect
+  participant R as Plan reviewer
   participant E as Executors
-  M->>C: a feature, feedback, a reorder
-  C->>P: .work/inbox/planner.md (their words, ids)
+  M->>C: a feature, feedback, "X first"
+  C->>C: an order word: order.py word, BACKLOG that turn
+  C->>P: .work/inbox/product.md (their words, ids)
   P->>M: which tasks get a pre-groomer? (one question)
   P->>G: one brief per chosen task
   G-->>P: .work/groom/id.md (options, requirements, tech weight)
   P->>G: steer: what does not fit (2 rounds max)
-  P->>P: writes the specs, Tech light or heavy
-  P-->>C: PLANNED ids + tech weights
-  C->>M: CTO check? (recommendation per row)
-  C->>T: tech gate for the heavy rows
-  T-->>C: How to build in each spec, or a refactor row first
+  P->>P: writes the specs with Links lines, proposes each row's place
+  P->>A: the gate: How to build (heavy), a Fit line (light)
+  A-->>P: sections written, open edges back
+  P->>R: .work/plan/pass/ (their words, the pass)
+  R-->>P: PLAN OK, OK WITH NOTES or CHANGES, a coverage table
+  P->>M: ONE question: open calls, the review's owner items
+  P-->>C: PLANNED ids tech=.. review=..
+  C->>C: order.py check
   C->>E: executors build in order
 ```
 
 ### 3. T-shaped grooming
 
-The planner is the bar: it sees every spec, decision and the order. Each pre-groomer is a stem: it digs into one task with a fresh, small context and writes a report; the planner checks it against the wide view, steers it, and writes the spec itself.
+The product lead is the bar: it sees every spec, decision and the order. Each pre-groomer is a stem: it digs into one task with a fresh, small context and writes a report; the product lead checks it against the wide view, steers it, and writes the spec itself.
 
 ```mermaid
 flowchart TB
-  P["Planner: all specs, decisions, order, architecture budgets"]
+  P["Product lead: all specs, decisions, order, architecture budgets"]
   P --- G1["Pre-groomer: task A<br/>need, today, options, requirements"]
   P --- G2["Pre-groomer: task B"]
-  P --- G3["Planner grooms small task C itself"]
-  G1 --> R1[".work/groom/A.md"] --> S1["spec A (planner)"]
-  G2 --> R2[".work/groom/B.md"] --> S2["spec B (planner)"]
+  P --- G3["Product lead grooms small task C itself"]
+  G1 --> R1[".work/groom/A.md"] --> S1["spec A (product lead)"]
+  G2 --> R2[".work/groom/B.md"] --> S2["spec B (product lead)"]
   G3 --> S3["spec C"]
 ```
 
 ### 4. The batch loop
 
-Review before the slow tests. A green or green-with-notes review ends in the reviewer's own fixes and gate, so the executor retires at READY FOR REVIEW; only a real major goes back to it, and a fresh reviewer then checks the delta only (docs or tools only: on the mid model). A reviewer averages ~44k context per call, an executor 86-148k. A design question goes to the CTO, a product question to the planner.
+Review before the slow tests. A green or green-with-notes review ends in the reviewer's own fixes and gate, so the executor retires at READY FOR REVIEW; only a real major goes back to it, and a fresh reviewer then checks the delta only (docs or tools only: on the mid model). A reviewer averages ~44k context per call, an executor 86-148k. A design question goes to the architect, a product question to the product lead.
 
 ```mermaid
 flowchart LR
@@ -83,7 +91,7 @@ flowchart LR
   R -->|"real blocker or major"| E2["executor fixes<br/>(it knows the design)"]
   E2 -->|"READY FOR REVIEW"| R2{"fresh reviewer<br/>delta only"}
   R2 --> F
-  R -->|design question| T[CTO]
+  R -->|design question| T[Architect]
   T --> E2
   I --> APP[(running app)]
 ```
@@ -94,8 +102,8 @@ Every ~10 feature batches, on a critical smell, or when known red tests keep gro
 
 ```mermaid
 flowchart LR
-  S[features paused] --> W[CTO health sweep<br/>refactor rows by criticality]
-  W --> O[planner orders them<br/>the owner sees the list]
+  S[features paused] --> W[architect health sweep<br/>refactor rows by criticality]
+  W --> O[the coordinator places them<br/>the owner sees the list]
   O --> X[executors refactor<br/>no behaviour change]
   X --> D[librarian pass<br/>contradictions, compaction, budgets]
   D --> Z[features again]
@@ -139,6 +147,9 @@ flowchart TB
 | merge cause (`cause.py`, `merge-log.py --from`), cache-ttl, tokens-since, union | `tools/work/` | 46, 51 |
 | friction (environment errors lanes worked around, clustered) | `tools/work/friction.py` | 72 |
 | doubt (code files lanes looked up the reason for, or flagged) | `tools/work/doubt.py` | 74 |
+| the knowledge map (what relates to a spec, file, decision or module; no model) | `tools/work/kmap.py`, `docs/kmap/` | 80 |
+| role telemetry (raw commands a tool covers, inline helpers, reads off the map, per role) | `tools/work/role-telemetry.py`, `docs/workflow/telemetry.md` | 79 |
+| the build order (an owner word into BACKLOG, stamped and logged; the order check) | `tools/work/order.py` | 76 |
 | gate run + ship, known reds, autodeploy | `tools/ci/` ([its README](skills/vibecode/templates/always/tools/ci/README.md)) | 2, 23, 27, 43 |
 | vaultify (docs and logs as notes, table views) and its git hook; the gate's history log | `tools/vault/`, `tools/ci/gate.py` | 28, 54, 71 |
 | rtk, compaction config | `AGENTS.md`; the compaction snippet from `deploy.py --global` | 10, 17, 36 |
@@ -165,33 +176,64 @@ flowchart LR
 
 What's logged, who writes it, the cost model, the line format and the ideas not built yet: **[skills/vibecode/vault.md](skills/vibecode/vault.md)**.
 
+### 8. The knowledge map and role telemetry
+
+Roles used to find what relates by grepping and by walking links: one grep for a feature word returned 234k chars of hits in the source project. `tools/work/kmap.py` builds a typed map from what is already written (specs and their `Links:` lines, the backlog, decisions, the architecture's tables, `docs/kmap/modules.md`, imports, tests, merges) with **no model, in about a second**, and answers one question ranked and cut to a budget, with a level of detail and a signal to stop. `tools/work/role-telemetry.py` then counts, per role, the raw commands a tool already covers and the reads the map never gave; a flag climbs a ladder from "read three examples" to a fix, measured, not blocked.
+
+```mermaid
+flowchart LR
+  S["specs + Links, backlog, decisions,<br/>architecture, modules, code, git"] --> B["kmap build<br/>no model, ~1-2 s"]
+  B --> DB[(".work/kmap/ one map per state")]
+  DB --> Q["kmap topic --level 0-3 --role<br/>ranked, budgeted, says when to stop"]
+  Q --> R[roles]
+  DB --> C["kmap check<br/>dangling links, golden queries, hubs"]
+  DB --> X["kmap export<br/>Obsidian notes"]
+  R -. "kmap miss: a link it lacked" .-> S
+  R --> T["role-telemetry every 4 h<br/>raw commands, off-map reads"]
+  T --> F["one fix a week: a tool,<br/>a brief line, a link"]
+```
+
+| | |
+|---|---|
+| **Cost** | building: 0 model tokens; on the source project ~1,900 nodes and ~10,700 links in ~1.8 s, ~0.5 s a query (MEAS). One answer ~1 KB |
+| **Does it point at the right code?** | leave-one-out over 181 merged specs: the top 20 files held **49%** of what the merge changed (58% of the files that existed), against 28% from the spec's own mentions. Optimistic: spec text read at HEAD |
+| **Levels** | 0 a line per node · 1 facts (rules, declarations, decision text) · 2 sections and outlines with line numbers · 3 only what to read |
+| **Stop signals** | a footer saying what was cut and what next; `(seen)` for nodes shown before in the session; a LOOP line on the third same ask; ambiguous topics exit 3 with candidates, never a guess |
+| **Telemetry, measured** | 19-39% of each role's shell calls were raw commands a tool covers (7 days, upper bounds); `cut` typed inline 243 times |
+
+The roles, models, schema, link tiers, decay checks, evals, background jobs and the rollout: **[skills/vibecode/knowledge-and-roles.md](skills/vibecode/knowledge-and-roles.md)**.
+
 ## The roles
 
 | Role | Does | Model (picked at setup) |
 |---|---|---|
-| **Coordinator** | the owner's entry point: routes what they say, runs the lanes, keeps every machine busy with a ~10-minute heartbeat, resumes sessions after a usage limit, recommends model and effort, reports status (flags stale built branches) and reminds of blockers | mid model, medium effort |
-| **Planner** | grooms in breadth: vision, specs, order (built work first); asks once per pass which tasks get a pre-groomer; takes a queue of jobs per session | top model, high effort |
+| **Coordinator** | the owner's entry point: routes what they say, **owns the backlog's order** (an owner word goes in that same turn, `order.py word`), runs the lanes, keeps every machine busy with a ~10-minute heartbeat, resumes sessions after a usage limit, recommends model and effort, reports status (flags stale built branches) and reminds of blockers | mid model, medium effort |
+| **Product lead** (was: planner) | grooms in breadth: vision, specs, new rows where it proposes them; asks once per pass which tasks get a pre-groomer; closes each pass with the architect's gate and a fresh plan review; takes a queue of jobs per session, retires at ~140k | top (a premium model only with the owner's word), high |
 | **Pre-groomer** | one per heavy task (the stem of the T): options, requirements, how it should feel | top, high |
-| **CTO** (main code lead) | architecture; a `How to build` section for heavy specs before they are built; health sweeps that turn smells into refactor rows with criticality (YAGNI, KISS, DRY, SOLID, DDD-lite; errors, logging, security) | top, high (xhigh for a sweep) |
+| **Architect** (was: CTO) | architecture; in every pass a `How to build` for heavy specs and a `Fit:` line for light ones; health sweeps that turn smells into refactor rows with criticality (YAGNI, KISS, DRY, SOLID, DDD-lite; errors, logging, security); single design calls | as the product lead for gates and sweeps; top, high for a call |
+| **Plan reviewer** | fresh and read-only, once per planning pass: every owner sentence mapped to a rule (a coverage table), what was overlooked, the architecture, testability, the order; `PLAN OK` / `OK WITH NOTES` / `CHANGES` | top, high; a different model than the product lead's when possible |
 | **Librarian** | docs only: contradictions, compacted decisions, stale data removed, doc size budgets so every session reads less | mid, high |
 | **Executor** | builds one batch (or a chain) in its own worktree, test-first, by a short "How to build" list in the spirit of [ponytail](https://github.com/DietrichGebert/ponytail): the smallest complete change, reuse first, deletion beats addition | top, medium (high when it needs thinking) |
-| **Reviewer** | reads the diff against the spec before the slow tests; on green fixes its own minors and runs the gate (`READY TO MERGE`); tags blockers and majors by cause and structure problems `[smell]` for the CTO; a delta review of docs or tools only runs on a mid model | top (mid for such a delta), high, fresh per review |
+| **Reviewer** | reads the diff against the spec before the slow tests; on green fixes its own minors and runs the gate (`READY TO MERGE`); tags blockers and majors by cause and structure problems `[smell]` for the architect; a delta review of docs or tools only runs on a mid model | top (mid for such a delta), high, fresh per review |
 | **Integrator** | short-lived (~4 merges or 150k context): merges reviewed batches from its brief, a queue file and the report, never the specs; runs the gate, ships (push, vault, redeploy after code merges; with autodeploy on the app follows `main` by itself), writes the roadmap's "What's new" and a doc size line | mid, high |
 | **Lookup helper** | `/ask`: finds a fact in the docs or code with `grep` and answers in 10 lines with `file:line`; up to 5 numbered questions in one call, each answered under its number | small, low |
+
+**Renamed:** the planner is now the product lead (`/product`, `docs/workflow/product.md`) and the CTO the architect (`/architect`, `docs/workflow/architect.md`). An answers file with the old keys `M_PLANNER` and `M_CTO` still deploys; projects set up before keep their files (deploy never overwrites).
 
 ## Commands
 
 Every role gets an opencode command in the new project, each setting its own model, so you can talk to any of them in a new session at any time:
 
-`/coordinator` · `/planner <what to groom>` · `/cto <job>` · `/librarian <pass>` · `/pregroom <task>` · `/reviewer <id> base head` · `/builder <batch>` (solo) · `/ask <question, or 1. .. 5. questions>`
+`/coordinator` · `/product <what to groom>` · `/architect <job>` · `/plan-review <pass>` · `/librarian <pass>` · `/pregroom <task>` · `/reviewer <id> base head` · `/builder <batch>` (solo) · `/ask <question, or 1. .. 5. questions>`
 
 ## Keeping tokens low
 
-- **Read less:** doc budgets and start reads (`tools/work/check-docs.py`), a big file read whole once, outlines (`tools/work/map.py`) and `git grep` before reading code.
+- **Read less:** doc budgets and start reads (`tools/work/check-docs.py`), briefs of at most 40 lines with the rest read by section, a big file read whole once, outlines (`tools/work/map.py`) and `git grep` before reading code.
+- **Ask the map, not the tree:** `tools/work/kmap.py <topic>` for what relates, ranked and budgeted, with no model.
 - **Wait less:** long runs in the foreground, never polled (polling was 37% of integrator cache reads); a small live queue file.
-- **Carry less:** role sessions retire at ~200-250k, integrators after ~4 merges, reviewers fresh; lanes auto-compact early.
+- **Carry less:** the planning roles retire at ~140k (their alias compacts at ~150k: the old 250k line never fired), integrators after ~4 merges, reviewers fresh; lanes auto-compact early.
 - **Wake less** (opt-in): the pacer holds the coordinator's wake-ups for one period and sends them as one model call.
-- **Look for it:** the coordinator audits each retired session (`tools/work/session-audit.py`) and turns repeat smells into fixes.
+- **Look for it:** the coordinator audits each retired session (`tools/work/session-audit.py`), and every 4 hours scans for friction, doubt and roles bypassing their tools (`role-telemetry.py`); repeat smells become fixes.
 
 Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](OPTIMIZATIONS.md).
 
@@ -202,10 +244,10 @@ Every cut, its measured or estimated saving and its status: [OPTIMIZATIONS.md](O
 3. **Interviews you once** (one question-tool call): scale, reviewers, hardware, tests, how model use is paid.
 4. **Probes the machines** (OS, cores, RAM, GPU, tool versions; optionally a second machine over SSH) and picks an executor count.
 5. **Picks models and effort** per role from the models actually available to you.
-6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
-7. **Prints the session prompts** with model and effort: the planner prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
+6. **Deploys the templates** with `scripts/deploy.py`: `AGENTS.md`, `docs/` (vision, planning, backlog, roadmap, decisions, handover, machines, measurements, prompts, spec template), role briefs under `docs/workflow/` (with these diagrams as `workflow.html`), the role commands under `.opencode/commands/`, the knowledge map's modules and golden queries under `docs/kmap/`, scripts under `tools/work/` (integration, merge log, worktrees, test locks, remote runs, the docs budget check, a doc finder, a code outline, the knowledge map, the build order, role telemetry, the session token audit, the coordinator's heartbeat, the review pack), the local CI gate (and opt-in autodeploy) under `tools/ci/` and the docs vault under `tools/vault/` (its git hook installed; `--no-vault` leaves it out). Then `git init` and a first commit; it never adds a remote or pushes.
+7. **Prints the session prompts** with model and effort: the product lead's prompt to paste first, then the coordinator (or solo builder) prompt. They are also kept in `docs/PROMPTS.md`.
 
-It writes no product code; the planner session plans the product.
+It writes no product code; the product lead's session plans the product.
 
 ## Install
 
@@ -251,6 +293,7 @@ The interview answers decide which template sets are deployed:
 skills/vibecode/SKILL.md          the skill
 skills/vibecode/scripts/deploy.py copies and fills the templates
 skills/vibecode/vault.md          the vault: append-only logs as a zero-LLM database
+skills/vibecode/knowledge-and-roles.md  the planning roles, the build order, the knowledge map, role telemetry, background jobs
 skills/vibecode/templates/        always/ team/ solo/ reviewers/ e2e/ remote/ (opencode-global/: opt-in, deploy.py --global)
 commands/vibecode.md              the /vibecode command
 ```
